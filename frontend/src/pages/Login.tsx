@@ -38,11 +38,11 @@ export default function Login() {
             SIH26189 — AI-Powered Criminal Network Analysis System
           </p>
 
-          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Username</label>
+          <label style={{ fontSize: 13.5, color: 'var(--text-dim)' }}>Username</label>
           <input className="input" style={{ margin: '6px 0 16px' }} value={username}
                  onChange={e => setUsername(e.target.value)} />
 
-          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Password</label>
+          <label style={{ fontSize: 13.5, color: 'var(--text-dim)' }}>Password</label>
           <input className="input" style={{ margin: '6px 0 16px' }} type="password" value={password}
                  onChange={e => setPassword(e.target.value)} />
 
@@ -52,7 +52,7 @@ export default function Login() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
 
-          <p style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 18 }}>
+          <p style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 18 }}>
             Demo accounts: investigator1 / investigator2 (case-scoped) · admin1 (full access + audit tools)
           </p>
         </form>

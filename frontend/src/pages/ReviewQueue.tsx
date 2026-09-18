@@ -31,14 +31,14 @@ export default function ReviewQueue() {
         {reviewQueue.map(cluster => (
           <div key={cluster.cluster_id} className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>{cluster.cluster_id} · {cluster.entity_type}</span>
+              <span className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{cluster.cluster_id} · {cluster.entity_type}</span>
               <span className="badge badge-medium">{cluster.status}</span>
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-dim)', marginBottom: 10 }}>{cluster.reason}</div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
               {cluster.mentions.map(m => (
-                <span key={m.mention_id} className="mono" style={{ fontSize: 11, background: 'var(--card)', padding: '4px 9px', borderRadius: 8, border: '1px solid var(--line)' }}>
+                <span key={m.mention_id} className="mono" style={{ fontSize: 12.5, background: 'var(--card)', padding: '4px 9px', borderRadius: 8, border: '1px solid var(--line)' }}>
                   {m.text}{m.fir_role ? ` (${m.fir_role})` : ''} · {m.source_record_id}
                 </span>
               ))}
@@ -49,7 +49,7 @@ export default function ReviewQueue() {
                 <button
                   key={d}
                   className="btn"
-                  style={{ fontSize: 10.5 }}
+                  style={{ fontSize: 12 }}
                   disabled={busy === cluster.cluster_id || cluster.status !== 'PENDING'}
                   onClick={() => resolve(cluster.cluster_id, d)}
                 >

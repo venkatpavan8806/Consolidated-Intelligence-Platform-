@@ -41,7 +41,7 @@ export default function WomenSafety() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 28 }}>
         <div>
           <Eyebrow>Recruiter Candidates</Eyebrow>
-          <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
+          <p style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
             Fan-out to ≥3 low-degree contacts within one community. Intentionally generic — will also
             match unrelated hub structures (e.g. a burner-rotation phone). Every candidate requires
             human verification for exactly this reason.
@@ -59,7 +59,7 @@ export default function WomenSafety() {
 
         <div>
           <Eyebrow>Transporter / Intermediary Candidates</Eyebrow>
-          <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
+          <p style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
             COMMUNITY_BRIDGE (neighbours span ≥2 Louvain communities) and STRUCTURAL_BRIDGE_PATH
             (primary, more reliable for small chains) are run independently and merged.
           </p>
@@ -79,7 +79,7 @@ export default function WomenSafety() {
       </div>
 
       <Eyebrow>Repeat-Location Signal</Eyebrow>
-      <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: '8px 0 12px', maxWidth: 780 }}>
+      <p style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '8px 0 12px', maxWidth: 780 }}>
         The same real-world location named across ≥3 independently-sourced records, tied to different
         entities — distinct from a location that recurs for a mundane reason (e.g. a police station name
         appearing on every FIR it filed), which is never surfaced here.
@@ -91,7 +91,7 @@ export default function WomenSafety() {
               <span className="card-value mono" style={{ fontSize: 14 }}>{loc.location}</span>
               <SeverityBadge severity="MEDIUM" />
             </div>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 6 }}>
+            <div className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 6 }}>
               named in {loc.independent_source_count} independent records: {loc.source_records.join(', ')}
             </div>
           </div>

@@ -38,7 +38,7 @@ export default function Overview() {
         {leads.filter(l => l.severity === 'HIGH').slice(0, 6).map(l => (
           <div key={l.lead_id} className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>{l.lead_type}</span>
+              <span className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{l.lead_type}</span>
               <SeverityBadge severity={l.severity} />
             </div>
             <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{l.summary}</div>

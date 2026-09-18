@@ -91,7 +91,7 @@ export default function GraphExplorer() {
           {detail && (
             <div style={{ marginTop: 10 }}>
               <div className="card-value mono" style={{ fontSize: 15 }}>{detail.entity.canonical_value}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 2 }}>{detail.entity.entity_type}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{detail.entity.entity_type}</div>
               {Boolean(detail.entity.is_official || detail.entity.is_utility) && (
                 <div className="badge badge-high" style={{ marginTop: 8 }}>
                   EXCLUDED — {detail.entity.is_official ? 'OFFICIAL' : 'UTILITY'}
@@ -103,8 +103,8 @@ export default function GraphExplorer() {
                   <div className="card-label" style={{ marginTop: 16 }}>FIR Mentions ({detail.fir_records.length})</div>
                   {detail.fir_records.map((f: any) => (
                     <div key={f.fir_id} className="card-tight" style={{ marginTop: 6 }}>
-                      <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>{f.fir_id} · {f.station} · {f.date.slice(0, 10)}</div>
-                      <div style={{ fontSize: 12, marginTop: 4 }}>{f.text}</div>
+                      <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>{f.fir_id} · {f.station} · {f.date.slice(0, 10)}</div>
+                      <div style={{ fontSize: 13.5, marginTop: 4 }}>{f.text}</div>
                     </div>
                   ))}
                 </>
@@ -115,10 +115,10 @@ export default function GraphExplorer() {
                   <div className="card-label" style={{ marginTop: 16 }}>Surveillance / Intelligence Reports ({detail.intel_records.length})</div>
                   {detail.intel_records.map((r: any) => (
                     <div key={r.record_id} className="card-tight" style={{ marginTop: 6 }}>
-                      <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>
+                      <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>
                         {r.record_id} · {r.source_category.replace(/_/g, ' ')} · {r.reporting_unit} · {r.date.slice(0, 10)}
                       </div>
-                      <div style={{ fontSize: 12, marginTop: 4 }}>{r.text}</div>
+                      <div style={{ fontSize: 13.5, marginTop: 4 }}>{r.text}</div>
                     </div>
                   ))}
                 </>
@@ -128,7 +128,7 @@ export default function GraphExplorer() {
                 <>
                   <div className="card-label" style={{ marginTop: 16 }}>Call Records ({detail.cdr_records.length})</div>
                   {detail.cdr_records.slice(0, 8).map((c: any) => (
-                    <div key={c.record_id} className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+                    <div key={c.record_id} className="mono" style={{ fontSize: 12.5, color: 'var(--text-dim)', marginTop: 4 }}>
                       {c.caller} → {c.callee} · {c.timestamp.slice(0, 16)} · {c.duration_sec}s
                     </div>
                   ))}
@@ -139,7 +139,7 @@ export default function GraphExplorer() {
                 <>
                   <div className="card-label" style={{ marginTop: 16 }}>Transactions ({detail.transaction_records.length})</div>
                   {detail.transaction_records.slice(0, 8).map((t: any) => (
-                    <div key={t.record_id} className="mono" style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 4 }}>
+                    <div key={t.record_id} className="mono" style={{ fontSize: 12.5, color: 'var(--text-dim)', marginTop: 4 }}>
                       {t.sender} → {t.receiver} · ₹{t.amount.toLocaleString()} · {t.timestamp.slice(0, 10)}
                     </div>
                   ))}

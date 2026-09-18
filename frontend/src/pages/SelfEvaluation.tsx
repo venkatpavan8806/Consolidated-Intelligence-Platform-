@@ -6,8 +6,8 @@ function CheckRow({ check, passed, detail }: { check: string; passed: boolean; d
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
       <div>
-        <div className="mono" style={{ fontSize: 12.5 }}>{check}</div>
-        {detail && <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>{JSON.stringify(detail)}</div>}
+        <div className="mono" style={{ fontSize: 13.5 }}>{check}</div>
+        {detail && <div className="mono" style={{ fontSize: 12, color: 'var(--text-faint)' }}>{JSON.stringify(detail)}</div>}
       </div>
       <span className={`badge ${passed ? 'badge-green' : 'badge-high'}`}>{passed ? 'PASS' : 'FAIL'}</span>
     </div>
@@ -33,7 +33,7 @@ export default function SelfEvaluation() {
       </p>
 
       <Eyebrow>Data Source Coverage</Eyebrow>
-      <p style={{ color: 'var(--text-faint)', fontSize: 12, margin: '8px 0 12px', maxWidth: 780 }}>
+      <p style={{ color: 'var(--text-faint)', fontSize: 13.5, margin: '8px 0 12px', maxWidth: 780 }}>
         Every data source category named in the problem statement, with a live record count from this run.
       </p>
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -86,7 +86,7 @@ export default function SelfEvaluation() {
         </div>
       ) : (
         <>
-          <div className="mono" style={{ fontSize: 11, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
+          <div className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
             last run: {data.stage_timings.run_at}
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>

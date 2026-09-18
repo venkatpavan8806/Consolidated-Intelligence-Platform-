@@ -35,7 +35,7 @@ export default function Leads() {
           <button
             key={t}
             className="btn"
-            style={{ fontSize: 11, borderColor: filter === t ? 'var(--violet)' : undefined }}
+            style={{ fontSize: 12.5, borderColor: filter === t ? 'var(--violet)' : undefined }}
             onClick={() => setFilter(t)}
           >
             {t} {t !== 'ALL' && `(${leads.filter(l => l.lead_type === t).length})`}
@@ -48,7 +48,7 @@ export default function Leads() {
           <div key={lead.lead_id} className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <div>
-                <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)' }}>{lead.lead_type}</span>
+                <span className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{lead.lead_type}</span>
                 {lead.method_provenance && (
                   <span style={{ marginLeft: 8 }}>
                     {lead.method_provenance.map(m => <span key={m} className="badge badge-violet" style={{ marginRight: 4 }}>{m}</span>)}
@@ -62,7 +62,7 @@ export default function Leads() {
             {lead.signals.length > 0 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
                 {lead.signals.map((s, i) => (
-                  <span key={i} className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)', background: 'var(--card)', padding: '3px 8px', borderRadius: 8, border: '1px solid var(--line)' }}>
+                  <span key={i} className="mono" style={{ fontSize: 12, color: 'var(--text-dim)', background: 'var(--card)', padding: '3px 8px', borderRadius: 8, border: '1px solid var(--line)' }}>
                     {s.signal}: {String(s.value)}
                   </span>
                 ))}
@@ -70,7 +70,7 @@ export default function Leads() {
             )}
 
             {lead.source_record_ids.length > 0 && (
-              <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)', marginBottom: 10 }}>
+              <div className="mono" style={{ fontSize: 12, color: 'var(--text-faint)', marginBottom: 10 }}>
                 sources: {lead.source_record_ids.join(', ')}
               </div>
             )}
@@ -81,7 +81,7 @@ export default function Leads() {
                   key={v}
                   className="btn"
                   style={{
-                    fontSize: 10.5,
+                    fontSize: 12,
                     borderColor: lead.disposition?.disposition === v ? 'var(--violet)' : undefined,
                     opacity: busy === lead.lead_id ? 0.5 : 1,
                   }}
@@ -92,7 +92,7 @@ export default function Leads() {
                 </button>
               ))}
               {lead.disposition && (
-                <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>
                   marked {lead.disposition.disposition} by {lead.disposition.actor}
                 </span>
               )}

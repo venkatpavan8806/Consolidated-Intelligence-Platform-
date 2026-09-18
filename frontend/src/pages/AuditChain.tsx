@@ -105,13 +105,13 @@ export default function AuditChain() {
           {entries.map(e => (
             <div key={e.seq} className="card-tight" style={{ borderColor: e.browserValid ? undefined : 'var(--red)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="mono" style={{ fontSize: 11 }}>#{e.seq} · {e.action} · {e.actor}</span>
+                <span className="mono" style={{ fontSize: 12.5 }}>#{e.seq} · {e.action} · {e.actor}</span>
                 <span className={`badge ${e.browserValid ? 'badge-green' : 'badge-high'}`}>
                   {e.browserValid ? 'OK' : 'BROKEN'}
                 </span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>{e.reason} {e.case_id ? `(${e.case_id})` : ''}</div>
-              <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 6, wordBreak: 'break-all' }}>
+              <div style={{ fontSize: 13.5, color: 'var(--text-dim)', marginTop: 4 }}>{e.reason} {e.case_id ? `(${e.case_id})` : ''}</div>
+              <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 6, wordBreak: 'break-all' }}>
                 hash: {e.hash.slice(0, 24)}… · browser: {e.browserHash.slice(0, 24)}…
               </div>
             </div>

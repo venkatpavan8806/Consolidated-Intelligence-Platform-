@@ -102,11 +102,11 @@ export default function Dashboard() {
         <div style={{ width: 232, borderRight: '1px solid var(--line)', padding: '28px 16px', position: 'relative', zIndex: 1, flexShrink: 0 }}>
           <Eyebrow>C.I.P.</Eyebrow>
           <div style={{ fontSize: 15, fontWeight: 600, margin: '8px 0 2px' }}>{activeCase.title}</div>
-          <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 12 }}>{activeCase.case_id}</div>
+          <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 12 }}>{activeCase.case_id}</div>
 
           <button
             className="btn"
-            style={{ width: '100%', fontSize: 10.5, marginBottom: 16 }}
+            style={{ width: '100%', fontSize: 12, marginBottom: 16 }}
             onClick={startTour}
           >
             ◎ Take a Tour
@@ -127,12 +127,12 @@ export default function Dashboard() {
           </div>
 
           <div style={{ marginTop: 32, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{user?.displayName}</div>
-            <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 10 }}>{user?.role}</div>
-            <button className="btn" style={{ width: '100%', fontSize: 11 }} onClick={() => navigate('/cases')}>
+            <div style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>{user?.displayName}</div>
+            <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 10 }}>{user?.role}</div>
+            <button className="btn" style={{ width: '100%', fontSize: 12.5 }} onClick={() => navigate('/cases')}>
               Switch Case
             </button>
-            <button className="btn" style={{ width: '100%', fontSize: 11, marginTop: 8 }} onClick={logout}>
+            <button className="btn" style={{ width: '100%', fontSize: 12.5, marginTop: 8 }} onClick={logout}>
               Sign Out
             </button>
           </div>

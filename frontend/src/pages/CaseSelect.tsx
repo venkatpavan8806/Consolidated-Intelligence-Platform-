@@ -61,7 +61,7 @@ export default function CaseSelect() {
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontWeight: 600 }}>{c.title}</div>
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 4 }}>
+                    <div className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>
                       {c.case_id} · {c.category} · opened {c.opened_date.slice(0, 10)}
                     </div>
                   </div>
@@ -72,7 +72,7 @@ export default function CaseSelect() {
             {cases.length === 0 && <div style={{ color: 'var(--text-faint)' }}>No cases assigned to this account.</div>}
           </div>
 
-          <label style={{ fontSize: 12, color: 'var(--text-dim)' }}>Reason for query (required, audit-logged)</label>
+          <label style={{ fontSize: 13.5, color: 'var(--text-dim)' }}>Reason for query (required, audit-logged)</label>
           <input
             className="input"
             style={{ margin: '6px 0 16px' }}

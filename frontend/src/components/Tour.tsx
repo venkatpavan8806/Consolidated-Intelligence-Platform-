@@ -151,14 +151,14 @@ export default function Tour({ active, step, onNext, onBack, onClose }: TourProp
         position: 'fixed', top: tooltipTop, left: tooltipLeft, width: tooltipWidth, zIndex: 10000,
         borderColor: 'var(--violet)',
       }}>
-        <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+        <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
           <span>STEP {step + 1} OF {TOUR_STEPS.length}</span>
           <span onClick={onClose} style={{ cursor: 'pointer' }}>SKIP TOUR ✕</span>
         </div>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>{current.title}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>{current.body}</div>
+        <div style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>{current.body}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
-          <button className="btn" style={{ fontSize: 11, opacity: step === 0 ? 0.4 : 1 }} onClick={onBack} disabled={step === 0}>
+          <button className="btn" style={{ fontSize: 12.5, opacity: step === 0 ? 0.4 : 1 }} onClick={onBack} disabled={step === 0}>
             Back
           </button>
           <div style={{ display: 'flex', gap: 4 }}>
@@ -169,7 +169,7 @@ export default function Tour({ active, step, onNext, onBack, onClose }: TourProp
               }} />
             ))}
           </div>
-          <button className="btn btn-primary" style={{ fontSize: 11 }} onClick={onNext}>
+          <button className="btn btn-primary" style={{ fontSize: 12.5 }} onClick={onNext}>
             {isLast ? 'Finish' : 'Next'}
           </button>
         </div>
