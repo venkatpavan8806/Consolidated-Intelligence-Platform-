@@ -71,14 +71,14 @@ export default function GraphExplorer() {
               }
               if (node.id === selected) {
                 ctx.lineWidth = 1.5;
-                ctx.strokeStyle = '#f4f2fb';
+                ctx.strokeStyle = '#ffffff';
                 ctx.beginPath();
                 ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
                 ctx.stroke();
               }
               if (globalScale > 1.4) {
                 ctx.font = '3px "JetBrains Mono"';
-                ctx.fillStyle = 'rgba(244,242,251,0.7)';
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
                 ctx.fillText(node.label, node.x + r + 2, node.y + 2);
               }
             }}

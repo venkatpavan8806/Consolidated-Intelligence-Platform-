@@ -4,11 +4,11 @@
   --panel-2: #100e1a;
   --card: #020202;
   --card-2: #0c0a13;
-  --line: rgba(255, 255, 255, 0.09);
+  --line: rgba(156, 140, 245, 0.16);
   --violet: #9c8cf5;
   --violet-2: #c4b8ff;
   --violet-dim: #6a5cc4;
-  --text: #f4f2fb;
+  --text: #ffffff;
   --text-dim: #a89fc4;
   --text-faint: #8f87b0;
   --amber: #e3a53f;
@@ -109,7 +109,7 @@ a {
   width: 420px;
   height: 420px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(156, 140, 245, 0.1);
   pointer-events: none;
   z-index: 0;
 }
@@ -126,7 +126,7 @@ a {
   top: -260px;
   width: 560px;
   height: 560px;
-  border-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(156, 140, 245, 0.07);
 }
 
 /* --- connector card motif --- */
@@ -301,7 +301,7 @@ a {
 
 .nav-item:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(156, 140, 245, 0.06);
 }
 
 .nav-item.active {
@@ -371,7 +371,7 @@ a {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(156, 140, 245, 0.25);
   border-radius: 8px;
 }
 ::-webkit-scrollbar-track {

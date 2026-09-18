@@ -65,7 +65,7 @@ export function FlagshipBanner({ children }: { children: ReactNode }) {
 
 export const ENTITY_TYPE_COLORS: Record<string, string> = {
   PERSON: '#c4b8ff', PHONE: '#5fc082', ACCOUNT: '#e3a53f', VEHICLE: '#6a5cc4',
-  LOCATION: '#e2685a', ORGANIZATION: '#a89fc4', CASE: '#f4f2fb',
+  LOCATION: '#e2685a', ORGANIZATION: '#a89fc4', CASE: '#ffffff',
 };
 
 export function EntityTypeIcon({ type }: { type: string }) {
