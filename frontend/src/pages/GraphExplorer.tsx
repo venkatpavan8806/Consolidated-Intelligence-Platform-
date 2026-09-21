@@ -5,6 +5,21 @@ import type { DashboardData } from './Dashboard';
 import { Eyebrow, ENTITY_TYPE_COLORS } from '../components/common';
 import { api } from '../api/client';
 
+function shortLabel(node: any): string {
+  const label = String(node?.label ?? '').trim();
+  if (!label) return '';
+  if (node.entity_type === 'PHONE' || node.entity_type === 'ACCOUNT') {
+    const digits = label.replace(/\D/g, '');
+    return digits.length >= 4 ? digits.slice(-4) : label.slice(0, 4).toUpperCase();
+  }
+  if (node.entity_type === 'VEHICLE') {
+    return label.replace(/\s/g, '').slice(-4).toUpperCase();
+  }
+  const words = label.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return words[0].slice(0, 2).toUpperCase();
+}
+
 export default function GraphExplorer() {
   const { graph } = useOutletContext<DashboardData>();
   const [selected, setSelected] = useState<string | null>(null);
@@ -56,8 +71,8 @@ export default function GraphExplorer() {
             linkLineDash={(l: any) => (l.epistemic_status === 'NLP_EXTRACTED' ? [3, 2] : null)}
             linkWidth={1}
             onNodeClick={onNodeClick}
-            nodeCanvasObject={(node: any, ctx, globalScale) => {
-              const r = 4.5;
+            nodeCanvasObject={(node: any, ctx) => {
+              const r = 6;
               ctx.beginPath();
               ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
               ctx.fillStyle = ENTITY_TYPE_COLORS[node.entity_type] || '#a89fc4';
@@ -76,10 +91,17 @@ export default function GraphExplorer() {
                 ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI);
                 ctx.stroke();
               }
-              if (globalScale > 1.4) {
-                ctx.font = '3px "JetBrains Mono"';
-                ctx.fillStyle = 'rgba(255,255,255,0.7)';
-                ctx.fillText(node.label, node.x + r + 2, node.y + 2);
+
+              const initials = shortLabel(node);
+              if (initials) {
+                ctx.font = `bold ${r * 1.05}px "JetBrains Mono"`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.lineWidth = 0.7;
+                ctx.strokeStyle = 'rgba(2,2,2,0.85)';
+                ctx.strokeText(initials, node.x, node.y + 0.2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(initials, node.x, node.y + 0.2);
               }
             }}
           />
