@@ -12,6 +12,7 @@ from app.detectors.burner_sim import detect_burner_rotation
 from app.detectors.mule_layering import detect_mule_layering
 from app.detectors.temporal_motif import detect_call_before_transfer
 from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
+from app.detectors.narcotics_physical import detect_ndps_compliance_flags
 from app.audit import chain as audit_chain
 from app.recovery.missing_link import evaluate_recall_at_k
 
@@ -165,6 +166,21 @@ def test_audit_chain_detects_and_recovers_from_tampering(conn):
 
     audit_chain.restore_entry(conn, target_seq, tampered["original"]["reason"], tampered["original"]["payload_raw"])
     assert audit_chain.verify_chain(conn)["valid"] is True
+
+
+def test_ndps_compliance_flags_all_planted_violations_detected(conn):
+    gt = _gt()["cases"]["C003"]
+    hits = {h["property_id"]: h for h in detect_ndps_compliance_flags(conn)}
+
+    assert gt["compliant_property"] not in hits, \
+        "a fully s.52A-compliant seizure must produce zero compliance flags -- the detector must not " \
+        "fire on clean data"
+
+    assert gt["violation_property"] in hits, "the planted non-compliant seizure must be flagged"
+    found_flags = {f["flag"] for f in hits[gt["violation_property"]]["flags"]}
+    expected_flags = set(gt["expected_violation_flags"])
+    missing = expected_flags - found_flags
+    assert not missing, f"expected NDPS compliance flags not raised: {missing}"
 
 
 def test_masked_edge_recovery_runs_and_reports_recall(conn):

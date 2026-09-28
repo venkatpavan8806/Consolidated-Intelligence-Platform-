@@ -39,6 +39,25 @@ RECRUITER_FANOUT_MAX_DEGREE = 3  # "low-degree" contacts of the recruiter
 # Repeat location signal
 REPEAT_LOCATION_MIN_SOURCES = 3
 
+# NDPS Physical-evidence compliance thresholds (Part B3 of the Sept 2026
+# research; sourced to GSR 899(E) 23.12.2022 sampling rules unless marked).
+# Sample quantity to be drawn per package/lot, in grams -- below this and
+# the sample itself is non-compliant regardless of how much was seized.
+NDPS_SAMPLE_MIN_GRAMS = {
+    "heroin": 5, "cocaine": 5,
+    "poppy straw": 100,
+    "ganja": 24, "opium": 24, "charas": 24,
+}
+NDPS_SAMPLE_MIN_GRAMS_DEFAULT = 5  # "other powders/liquids" per the Rules
+# Max identical packages bunched into one lot before a fresh lot is required.
+NDPS_LOT_SIZE_MAX_DEFAULT = 10
+NDPS_LOT_SIZE_MAX_BULK = {"ganja": 40, "poppy straw": 40, "charas": 40}
+# Weight-mismatch tolerance between the Test Memo's seizure weight and the
+# lab's received weight -- a *Bharat Aambale* "discrepancy in physical
+# evidence" once exceeded. [I] design default, not an official figure.
+NDPS_WEIGHT_MISMATCH_TOLERANCE_FRACTION = 0.01
+NDPS_WEIGHT_MISMATCH_TOLERANCE_GRAMS = 0.5
+
 # Missing link recovery
 LINK_RECOVERY_MASK_FRACTION = 0.2
 LINK_RECOVERY_WEIGHT_STRUCTURAL = 0.6

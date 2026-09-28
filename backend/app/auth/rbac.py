@@ -30,6 +30,7 @@ DEFAULT_CASE_ASSIGNMENTS = [
     ("investigator1", "C001"),
     ("investigator2", "C002"),
     ("investigator1", "C002"),
+    ("investigator2", "C003"),
 ]
 
 

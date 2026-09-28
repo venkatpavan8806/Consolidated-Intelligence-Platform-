@@ -16,6 +16,7 @@ from app.detectors.burner_sim import detect_burner_rotation
 from app.detectors.mule_layering import detect_mule_layering
 from app.detectors.temporal_motif import detect_call_before_transfer
 from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
+from app.detectors.narcotics_physical import detect_ndps_compliance_flags
 
 
 def _lead_id(lead_type: str, key: str) -> str:
@@ -209,8 +210,41 @@ def build_women_safety_leads(conn):
     return leads
 
 
+def build_narcotics_physical_leads(conn):
+    """Physical-evidence leads for the Narcotics case type: NDPS s.52A /
+    Test-Memo chain-of-custody compliance flags (see
+    app/detectors/narcotics_physical.py). These are record-level leads
+    (property_id/case_id), not graph-entity leads -- Physical evidence
+    doesn't sit on the entity graph the way Digital evidence does, so each
+    lead carries its own case_id for case-scoped filtering instead of
+    relying on entities_involved."""
+    leads = []
+    severity_rank = {"HIGH": 2, "MEDIUM": 1, "LOW": 0}
+
+    for hit in detect_ndps_compliance_flags(conn):
+        top_severity = max((f["severity"] for f in hit["flags"]), key=lambda s: severity_rank.get(s, 0))
+        flag_names = ", ".join(f["flag"] for f in hit["flags"])
+        leads.append({
+            "lead_id": _lead_id("NDPS_COMPLIANCE", hit["memo_id"]),
+            "lead_type": "NDPS_COMPLIANCE",
+            "severity": top_severity,
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"NDPS Test Memo {hit['memo_id']} (crime no. {hit['crime_no']}, "
+                       f"{hit['drug_description']}) has {len(hit['flags'])} chain-of-custody/compliance "
+                       f"flag(s): {flag_names}. Per Bharat Aambale v. State of Chhattisgarh, a procedural "
+                       f"lapse alone is not fatal -- it must be checked against the actual case file.",
+            "signals": [{"signal": f["flag"], "value": f["detail"]} for f in hit["flags"]],
+            "source_record_ids": [hit["property_id"], hit["memo_id"]],
+            "created_at": _now(),
+        })
+
+    return leads
+
+
 def build_all_leads(conn):
-    return build_leads(conn) + build_women_safety_leads(conn)
+    return build_leads(conn) + build_women_safety_leads(conn) + build_narcotics_physical_leads(conn)
 
 
 if __name__ == "__main__":
