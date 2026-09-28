@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { DashboardData } from './Dashboard';
-import { Eyebrow, SeverityBadge } from '../components/common';
+import { Eyebrow, SeverityBadge, ConnectorChain } from '../components/common';
 import { api } from '../api/client';
 
 export default function Leads() {
-  const { leads, reload } = useOutletContext<DashboardData>();
+  const { leads, reload, womenSafety } = useOutletContext<DashboardData>();
   const [filter, setFilter] = useState<string>('ALL');
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -29,6 +29,29 @@ export default function Leads() {
       <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 16 }}>
         Every lead is evidence-backed and requires human verification. Nothing here is an accusation.
       </p>
+
+      {womenSafety.chain_candidates.length > 0 && (
+        <div style={{ marginTop: 4, marginBottom: 28 }}>
+          <Eyebrow>Trafficking / Missing Person — Recruiter → Transporter → Receiver Chains</Eyebrow>
+          <p style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '8px 0 14px', maxWidth: 780 }}>
+            Reconstructed from the WOMEN_SAFETY_RECRUITER and WOMEN_SAFETY_TRANSPORTER leads below --
+            not a separate detection model, the same community-detection/broker-scoring machinery used
+            for general "kingpin" analysis, applied to this network and chained together where a
+            recruiter's contact set and a transporter's bridge path share an entity.
+          </p>
+          {womenSafety.chain_candidates.map((c, i) => (
+            <div key={i} style={{ marginBottom: 12 }}>
+              <ConnectorChain
+                nodes={[
+                  { label: 'Recruiter', value: c.recruiter.label, metric: c.recruiter.entity_type },
+                  { label: 'Transporter / Intermediary', value: c.transporter.label, metric: c.transporter.entity_type },
+                  { label: 'Receiver-side', value: c.receiver_side.label, metric: c.receiver_side.entity_type },
+                ]}
+              />
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         {types.map(t => (

@@ -23,17 +23,12 @@ export const TOUR_STEPS: TourStep[] = [
   {
     navKey: 'leads',
     title: 'Leads',
-    body: 'Every pattern the system found, in plain language, with the exact source records behind it. Mark each one Useful / Already Known / Wrong Person — the system never closes this loop itself.',
+    body: 'Every pattern the system found, in plain language, with the exact source records behind it -- financial, trafficking/missing-person, and physical-evidence leads alike, filterable by type. When a trafficking recruiter-transporter-receiver chain is reconstructed, it renders here too. Mark each one Useful / Already Known / Wrong Person -- the system never closes this loop itself.',
   },
   {
     navKey: 'review-queue',
     title: 'Review Queue',
     body: 'Cases where two similarly-named mentions could NOT be confirmed as the same person from the records alone. The system asks a human here instead of guessing.',
-  },
-  {
-    navKey: 'women-safety',
-    title: 'Women Safety (flagship)',
-    body: 'The trafficking-network view: recruiter and transporter candidates, plus a repeated-location signal. It reuses the exact same detection machinery as the financial-fraud view.',
   },
   {
     navKey: 'evaluation',
