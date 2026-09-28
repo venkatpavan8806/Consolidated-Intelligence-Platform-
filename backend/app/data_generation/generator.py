@@ -92,6 +92,67 @@ def add_txn(sender, receiver, amount, day, hour, minute):
     return tid
 
 
+PROPERTY_SEQ = IdSeq("PROP")
+ITEM_SEQ = IdSeq("ITEM")
+EVENT_SEQ = IdSeq("EVT")
+MEMO_SEQ = IdSeq("MEMO")
+
+case_case_type_rows = []
+case_property_rows = []
+property_item_rows = []
+custody_event_rows = []
+ndps_sampling_rows = []
+
+
+def add_case_type(case_id, case_type, status="CONFIRMED", confidence=None, reason=None):
+    case_case_type_rows.append((case_id, case_type, status, confidence, reason, None, None))
+
+
+def add_case_property(case_id, case_type, form_type, day, place, officer, witnesses):
+    pid = PROPERTY_SEQ.next()
+    case_property_rows.append((
+        pid, case_id, case_type, form_type, dt(days=day), place,
+        json.dumps(officer), json.dumps(witnesses), None, None, None, dt(days=day),
+    ))
+    return pid
+
+
+def add_property_item(property_id, description, quantity, unit, gross_weight, net_weight,
+                       identifiers=None, exhibit_mark=None, seal_description=None, seal_count=None):
+    iid = ITEM_SEQ.next()
+    property_item_rows.append((
+        iid, property_id, description, quantity, unit, gross_weight, net_weight,
+        json.dumps(identifiers or {}), exhibit_mark, seal_description, seal_count,
+    ))
+    return iid
+
+
+def add_custody_event(property_id, event_type, day, **kwargs):
+    eid = EVENT_SEQ.next()
+    custody_event_rows.append((
+        eid, property_id, event_type, dt(days=day),
+        kwargs.get("register_no"), kwargs.get("road_certificate_no"),
+        kwargs.get("from_location"), kwargs.get("to_location"), kwargs.get("countersigned_by"),
+        kwargs.get("seals_intact_and_tallied"), kwargs.get("report_no"), kwargs.get("conclusion_category"),
+        json.dumps(kwargs.get("attributes", {})),
+    ))
+    return eid
+
+
+def add_ndps_sampling(property_id, **kwargs):
+    mid = MEMO_SEQ.next()
+    ndps_sampling_rows.append((
+        mid, property_id,
+        kwargs.get("crime_no"), kwargs["drug_description"], kwargs["net_weight_seized"],
+        kwargs.get("lot_size"), kwargs.get("date_of_draw_of_sample"), kwargs.get("num_samples"),
+        kwargs.get("sample_weight_each"), int(kwargs.get("prepared_in_triplicate", False)),
+        kwargs.get("magistrate_certification_ts"), kwargs.get("net_weight_lab_received"),
+        kwargs.get("lab_date_of_receipt"), kwargs.get("disposal_form7_ref"), kwargs.get("disposal_form10_ref"),
+        kwargs.get("conveyance_chassis_no"), kwargs.get("conveyance_engine_no"),
+    ))
+    return mid
+
+
 # ---------------------------------------------------------------------------
 # CASE 1: Fraud Ring Alpha
 # ---------------------------------------------------------------------------
@@ -292,6 +353,97 @@ ground_truth["cases"][CASE_TRAFFICKING] = {
 }
 
 # ---------------------------------------------------------------------------
+# CASE 3: Narcotics - Physical-evidence vertical slice (Sept 2026 pivot)
+#
+# Two seizures under the same case: one fully s.52A-compliant (must produce
+# ZERO compliance flags -- proves the detector isn't just always firing),
+# one with every NDPS Test-Memo/chain-of-custody defect the research
+# identified, planted so ground truth can assert each specific flag fires.
+# ---------------------------------------------------------------------------
+CASE_NARCOTICS = "C003"
+
+add_case_type(CASE_NARCOTICS, "NARCOTICS", status="CONFIRMED", reason="seed data: NDPS seizure case")
+
+add_fir(CASE_NARCOTICS, "Sonepur Police Station", 150,
+        "Acting on prior information, a police team intercepted a vehicle near the Sonepur bypass "
+        "and recovered a quantity of suspected heroin concealed in the door panel. Accused apprehended "
+        "at the spot; seizure proceedings conducted as per NDPS Act procedure.")
+add_fir(CASE_NARCOTICS, "Sonepur Police Station", 165,
+        "Follow-up raid based on the earlier interception recovered a further quantity of suspected "
+        "charas from a rented storage unit linked to the same accused.")
+
+# --- Property A: compliant seizure (heroin) ---
+PROP_CLEAN = add_case_property(
+    CASE_NARCOTICS, "NARCOTICS", "NDPS_TEST_MEMO", day=150,
+    place="Sonepur bypass checkpoint",
+    officer={"name": "SI Manoj Tiwari", "rank": "Sub-Inspector"},
+    witnesses=[{"name": "Ramesh Yadav", "address": "Sonepur"}, {"name": "Suresh Prasad", "address": "Sonepur"}],
+)
+add_property_item(
+    PROP_CLEAN, description="Suspected heroin, powder form", quantity=1, unit="packet",
+    gross_weight=252.0, net_weight=250.0, exhibit_mark="Exh. A-1",
+    seal_description="Cloth seal, wax impression 'ST'", seal_count=1,
+)
+add_custody_event(PROP_CLEAN, "MALKHANA_DEPOSIT", day=150, register_no="XIX/2026/041",
+                   countersigned_by="MHC(M) R.K. Singh")
+add_custody_event(PROP_CLEAN, "MOVEMENT", day=151, road_certificate_no="RC/XXI/2026/019",
+                   from_location="Sonepur Malkhana", to_location="State FSL", countersigned_by="HC Dinesh Kumar")
+add_custody_event(PROP_CLEAN, "LAB_RECEIPT", day=152, seals_intact_and_tallied=1,
+                   report_no="FSL/2026/DRG/0091")
+add_ndps_sampling(
+    PROP_CLEAN,
+    crime_no="150/2026", drug_description="heroin", net_weight_seized=250.0,
+    lot_size=1, date_of_draw_of_sample=dt(days=150, hours=2), num_samples=2, sample_weight_each=5.0,
+    prepared_in_triplicate=True, magistrate_certification_ts=dt(days=151),
+    net_weight_lab_received=249.9, lab_date_of_receipt=dt(days=152),
+    disposal_form7_ref=None, disposal_form10_ref=None,
+)
+
+# --- Property B: non-compliant seizure (charas) -- every Part B3 defect planted ---
+PROP_VIOLATION = add_case_property(
+    CASE_NARCOTICS, "NARCOTICS", "NDPS_TEST_MEMO", day=165,
+    place="Rented storage unit, Sonepur",
+    officer={"name": "SI Manoj Tiwari", "rank": "Sub-Inspector"},
+    witnesses=[{"name": "Ajay Singh", "address": "Sonepur"}, {"name": "Vijay Singh", "address": "Sonepur"}],
+)
+add_property_item(
+    PROP_VIOLATION, description="Suspected charas, multiple packets", quantity=18, unit="packet",
+    gross_weight=1210.0, net_weight=1200.0, exhibit_mark="Exh. B-1",
+    seal_description="Cloth seal, wax impression 'ST'", seal_count=1,
+)
+add_custody_event(PROP_VIOLATION, "MALKHANA_DEPOSIT", day=165, register_no="XIX/2026/047",
+                   countersigned_by="MHC(M) R.K. Singh")
+add_custody_event(PROP_VIOLATION, "MOVEMENT", day=167, road_certificate_no="RC/XXI/2026/024",
+                   from_location="Sonepur Malkhana", to_location="State FSL", countersigned_by="HC Dinesh Kumar")
+# seal found NOT intact/tallied at the lab -- signal #3
+add_custody_event(PROP_VIOLATION, "LAB_RECEIPT", day=168, seals_intact_and_tallied=0,
+                   report_no="FSL/2026/DRG/0104")
+add_ndps_sampling(
+    PROP_VIOLATION,
+    crime_no="165/2026", drug_description="charas",
+    net_weight_seized=1200.0,
+    lot_size=45,                                    # signal #5: exceeds charas's 40-package bulk lot limit
+    date_of_draw_of_sample=dt(days=164, hours=10),  # signal #6: BEFORE seizure_datetime (day 165)
+    num_samples=2, sample_weight_each=10.0,        # signal #4: below the 24g GSR minimum for charas
+    prepared_in_triplicate=False,                  # signal #6: not triplicate
+    magistrate_certification_ts=None,              # signal #1: missing certification
+    net_weight_lab_received=1150.0,                # signal #2: 50g / ~4.2% short -- exceeds tolerance
+    lab_date_of_receipt=dt(days=168),
+    disposal_form7_ref="FORM7/2026/003", disposal_form10_ref=None,  # signal #7: incomplete disposal chain
+)
+
+ground_truth["cases"][CASE_NARCOTICS] = {
+    "title": "Narcotics - Sonepur Storage Unit",
+    "compliant_property": PROP_CLEAN,
+    "violation_property": PROP_VIOLATION,
+    "expected_violation_flags": [
+        "MAGISTRATE_CERTIFICATION_MISSING", "WEIGHT_MISMATCH", "SEAL_MISMATCH",
+        "SAMPLE_BELOW_RULE_MINIMUM", "LOT_SIZE_EXCEEDED", "TEST_MEMO_NOT_TRIPLICATE",
+        "SAMPLE_DRAWN_BEFORE_SEIZURE", "DISPOSAL_CERTIFICATE_INCOMPLETE",
+    ],
+}
+
+# ---------------------------------------------------------------------------
 # Background noise: unrelated random activity for realism / false-positive testing
 # ---------------------------------------------------------------------------
 NOISE_PHONES = [f"97000{str(i).zfill(5)}" for i in range(1, 25)]
@@ -318,7 +470,39 @@ def generate(reset: bool = True):
         [
             (CASE_FRAUD, "Fraud Ring Alpha", "financial_fraud", dt(days=0)),
             (CASE_TRAFFICKING, "Missing Persons - Sonepur Corridor", "women_safety", dt(days=100)),
+            (CASE_NARCOTICS, "Narcotics - Sonepur Storage Unit", "narcotics", dt(days=150)),
         ],
+    )
+    cur.executemany(
+        "INSERT INTO case_case_types (case_id, case_type, status, confidence, reason, confirmed_by, confirmed_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        case_case_type_rows,
+    )
+    cur.executemany(
+        "INSERT INTO case_property (property_id, case_id, case_type, form_type, seizure_datetime, place, "
+        "seizing_officer_json, witnesses_json, av_recording_id, recording_hash, forwarded_to_magistrate_ts, "
+        "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        case_property_rows,
+    )
+    cur.executemany(
+        "INSERT INTO property_item (item_id, property_id, description, quantity, unit, gross_weight, "
+        "net_weight, identifiers_json, exhibit_mark, seal_description, seal_count) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        property_item_rows,
+    )
+    cur.executemany(
+        "INSERT INTO custody_event (event_id, property_id, event_type, event_ts, register_no, "
+        "road_certificate_no, from_location, to_location, countersigned_by, seals_intact_and_tallied, "
+        "report_no, conclusion_category, attributes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        custody_event_rows,
+    )
+    cur.executemany(
+        "INSERT INTO ndps_sampling (memo_id, property_id, crime_no, drug_description, net_weight_seized, "
+        "lot_size, date_of_draw_of_sample, num_samples, sample_weight_each, prepared_in_triplicate, "
+        "magistrate_certification_ts, net_weight_lab_received, lab_date_of_receipt, disposal_form7_ref, "
+        "disposal_form10_ref, conveyance_chassis_no, conveyance_engine_no) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ndps_sampling_rows,
     )
     cur.executemany(
         "INSERT INTO fir_records (fir_id, case_id, station, date, text) VALUES (?, ?, ?, ?, ?)",

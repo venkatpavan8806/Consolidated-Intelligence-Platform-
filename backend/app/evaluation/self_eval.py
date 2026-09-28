@@ -114,6 +114,10 @@ def data_source_coverage(conn):
     sources.append({"source": "Call Detail Records (CDRs)", "record_count": cdr_count})
     txn_count = conn.execute("SELECT COUNT(*) AS n FROM transaction_records").fetchone()["n"]
     sources.append({"source": "Financial transaction records", "record_count": txn_count})
+    property_count = conn.execute("SELECT COUNT(*) AS n FROM case_property").fetchone()["n"]
+    sources.append({"source": "Physical-evidence property/seizure records", "record_count": property_count})
+    ndps_count = conn.execute("SELECT COUNT(*) AS n FROM ndps_sampling").fetchone()["n"]
+    sources.append({"source": "NDPS Test Memo (Form-6) records", "record_count": ndps_count})
     return sources
 
 
@@ -133,6 +137,7 @@ def check_detector_hits(conn):
     from app.graph.builder import build_analysis_subgraph
     from app.graph.analytics import compute_communities
     from app.detectors.women_safety import detect_transporter_candidates
+    from app.detectors.narcotics_physical import detect_ndps_compliance_flags
 
     gt = _load_ground_truth()
     checks = []
@@ -158,6 +163,17 @@ def check_detector_hits(conn):
     checks.append({"check": "women_safety_recruiter_found", "passed": recruiter_eid in ws["recruiters"]})
     checks.append({"check": "women_safety_transporter_found", "passed": transporter_eid in ws["transporters"],
                    "detail": {"methods": ws["transporters"].get(transporter_eid, {}).get("methods")}})
+
+    ndps_hits = {h["property_id"]: h for h in detect_ndps_compliance_flags(conn)}
+    gt_ndps = gt["cases"]["C003"]
+    clean_ok = gt_ndps["compliant_property"] not in ndps_hits
+    checks.append({"check": "ndps_compliant_seizure_produces_zero_flags", "passed": clean_ok})
+    violation_hit = ndps_hits.get(gt_ndps["violation_property"])
+    found_flags = {f["flag"] for f in violation_hit["flags"]} if violation_hit else set()
+    expected_flags = set(gt_ndps["expected_violation_flags"])
+    ndps_ok = expected_flags.issubset(found_flags)
+    checks.append({"check": "ndps_all_planted_violations_flagged", "passed": ndps_ok,
+                   "detail": {"expected": sorted(expected_flags), "found": sorted(found_flags)}})
 
     return checks
 

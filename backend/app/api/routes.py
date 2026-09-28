@@ -66,7 +66,10 @@ def case_leads(case_id: str, reason: str = Query(..., min_length=3), user: dict 
     conn = _conn()
     case_node_ids = get_case_entity_ids(conn, case_id)
     all_leads = build_all_leads(conn)
-    relevant = [l for l in all_leads if case_node_ids.intersection(l["entities_involved"])]
+    relevant = [
+        l for l in all_leads
+        if case_node_ids.intersection(l["entities_involved"]) or l.get("case_id") == case_id
+    ]
 
     dispositions = {r["lead_id"]: dict(r) for r in conn.execute("SELECT * FROM lead_dispositions").fetchall()}
     for lead in relevant:
