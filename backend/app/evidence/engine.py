@@ -27,6 +27,10 @@ from app.detectors.robbery_theft_physical import (
     detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
 )
 from app.detectors.robbery_theft_digital import detect_mo_series
+from app.detectors.trafficking_physical import (
+    detect_uidb_missing_person_candidates, detect_ignored_zipnet_match, detect_unsampled_body,
+    detect_late_dna_dispatch, detect_weak_dna_conclusion_relied_alone,
+)
 
 
 def _lead_id(lead_type: str, key: str) -> str:
@@ -557,11 +561,112 @@ def build_assault_homicide_digital_leads(conn):
     return leads
 
 
+def build_trafficking_physical_leads(conn):
+    """Physical-evidence leads for Trafficking/Missing Person: UIDB<->
+    missing-person candidate matching, ZIPNET's own ignored-match signal,
+    and DNA-sample-chain compliance. A candidate match and an ignored
+    match both genuinely span two case files (the UIDB's case and the
+    missing-person report's case, which can differ), so those leads carry
+    case_ids (plural) the same way the other cross-case detectors do."""
+    leads = []
+
+    for hit in detect_uidb_missing_person_candidates(conn):
+        case_ids = sorted({hit["case_id"], hit["missing_person_case_id"]})
+        leads.append({
+            "lead_id": _lead_id("UIDB_MISSING_PERSON_CANDIDATE_MATCH", f"{hit['uidb_id']}_{hit['missing_person_id']}"),
+            "lead_type": "UIDB_MISSING_PERSON_CANDIDATE_MATCH",
+            "severity": "HIGH",
+            "case_id": hit["case_id"],
+            "case_ids": case_ids,
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Unidentified body {hit['uidb_id']} matches missing-person report "
+                       f"{hit['missing_person_id']} on sex, age range, height, dress colour "
+                       f"({', '.join(hit['shared_dress_colours'])}) and district -- a candidate "
+                       f"identification, never a confirmed one, per the ZIPNET-modeled matching rule.",
+            "signals": [{"signal": "shared_dress_colours", "value": hit["shared_dress_colours"]}],
+            "source_record_ids": [hit["uidb_id"], hit["missing_person_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_ignored_zipnet_match(conn):
+        case_ids = sorted({hit["case_id"], hit["missing_person_case_id"]})
+        leads.append({
+            "lead_id": _lead_id("UIDB_IGNORED_ZIPNET_MATCH", f"{hit['uidb_id']}_{hit['missing_person_id']}"),
+            "lead_type": "UIDB_IGNORED_ZIPNET_MATCH",
+            "severity": "HIGH",
+            "case_id": hit["case_id"],
+            "case_ids": case_ids,
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"UIDB {hit['uidb_id']} already carries ZIPNET's own matched_missing_serial_no "
+                       f"pointing to missing-person report {hit['missing_person_id']}, but that case is "
+                       f"still shown OPEN -- the match exists in the record, the case file just hasn't "
+                       f"caught up to it.",
+            "signals": [{"signal": "missing_person_status", "value": "OPEN"}],
+            "source_record_ids": [hit["uidb_id"], hit["missing_person_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_unsampled_body(conn):
+        leads.append({
+            "lead_id": _lead_id("UIDB_UNSAMPLED_BODY", hit["pm_id"]),
+            "lead_type": "UIDB_UNSAMPLED_BODY",
+            "severity": "MEDIUM",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Unidentified body {hit['uidb_id']} has a post-mortem report ({hit['pm_id']}) but "
+                       f"no DNA sample record at all -- a one-time, perishable identification opportunity "
+                       f"that the Rajasthan HC/Lokniti Foundation preservation logic says should not be lost.",
+            "signals": [{"signal": "has_dna_sample", "value": False}],
+            "source_record_ids": [hit["uidb_id"], hit["pm_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_late_dna_dispatch(conn):
+        leads.append({
+            "lead_id": _lead_id("UIDB_LATE_DNA_DISPATCH", hit["sample_id"]),
+            "lead_type": "UIDB_LATE_DNA_DISPATCH",
+            "severity": "MEDIUM",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"DNA sample {hit['sample_id']} was dispatched {hit['hours_elapsed']} hours after "
+                       f"collection with no delay reason recorded -- past Kattavellai's own 48-hour "
+                       f"dispatch direction.",
+            "signals": [{"signal": "hours_elapsed", "value": hit["hours_elapsed"]}],
+            "source_record_ids": [hit["sample_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_weak_dna_conclusion_relied_alone(conn):
+        leads.append({
+            "lead_id": _lead_id("UIDB_WEAK_DNA_CONCLUSION_RELIED_ALONE", hit["sample_id"]),
+            "lead_type": "UIDB_WEAK_DNA_CONCLUSION_RELIED_ALONE",
+            "severity": "MEDIUM",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"DNA sample {hit['sample_id']} ({hit['conclusion_category']}, expert_examined="
+                       f"{hit['expert_examined']}) is the identification basis behind UIDB {hit['uidb_id']}'s "
+                       f"ZIPNET match, but per Nantu Nath a weak or unexamined conclusion should never "
+                       f"stand alone as identification.",
+            "signals": [{"signal": "conclusion_category", "value": hit["conclusion_category"]},
+                        {"signal": "expert_examined", "value": hit["expert_examined"]}],
+            "source_record_ids": [hit["sample_id"], hit["uidb_id"]],
+            "created_at": _now(),
+        })
+
+    return leads
+
+
 def build_all_leads(conn):
     return (
         build_leads(conn) + build_women_safety_leads(conn) + build_narcotics_physical_leads(conn)
         + build_robbery_theft_physical_leads(conn) + build_robbery_theft_digital_leads(conn)
         + build_assault_homicide_physical_leads(conn) + build_assault_homicide_digital_leads(conn)
+        + build_trafficking_physical_leads(conn)
     )
 
 

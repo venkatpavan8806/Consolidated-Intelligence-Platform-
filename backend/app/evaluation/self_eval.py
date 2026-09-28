@@ -130,6 +130,12 @@ def data_source_coverage(conn):
     sources.append({"source": "Forensic match records (fingerprint/ballistics/DNA)", "record_count": forensic_count})
     tower_count = conn.execute("SELECT COUNT(*) AS n FROM tower_location_record").fetchone()["n"]
     sources.append({"source": "Tower/cell-site location records", "record_count": tower_count})
+    mp_count = conn.execute("SELECT COUNT(*) AS n FROM missing_person_report").fetchone()["n"]
+    sources.append({"source": "Missing-person reports", "record_count": mp_count})
+    uidb_count = conn.execute("SELECT COUNT(*) AS n FROM uidb_record").fetchone()["n"]
+    sources.append({"source": "Unidentified Dead Body (ZIPNET/UIDB) records", "record_count": uidb_count})
+    dna_count = conn.execute("SELECT COUNT(*) AS n FROM dna_sample_record").fetchone()["n"]
+    sources.append({"source": "DNA sample chain-of-custody records", "record_count": dna_count})
     return sources
 
 
@@ -159,6 +165,10 @@ def check_detector_hits(conn):
         detect_forensic_matches, detect_forensic_confidence_misuse,
     )
     from app.detectors.assault_homicide_digital import detect_uncertified_tower_evidence, detect_spatiotemporal_correlation
+    from app.detectors.trafficking_physical import (
+        detect_uidb_missing_person_candidates, detect_ignored_zipnet_match, detect_unsampled_body,
+        detect_late_dna_dispatch, detect_weak_dna_conclusion_relied_alone,
+    )
     from app.classification.case_type_classifier import classify_case
 
     gt = _load_ground_truth()
@@ -251,6 +261,33 @@ def check_detector_hits(conn):
     spatiotemporal_hits = {h["record_id"] for h in detect_spatiotemporal_correlation(conn)}
     checks.append({"check": "assault_spatiotemporal_tower_correlation_detected",
                    "passed": gt_assault["tower_uncertified_id"] in spatiotemporal_hits})
+
+    gt_trafficking = gt["cases"]["C002"]
+
+    candidate_pairs = {(h["uidb_id"], h["missing_person_id"]) for h in detect_uidb_missing_person_candidates(conn)}
+    checks.append({"check": "uidb_candidate_match_detected_noise_silent",
+                   "passed": (gt_trafficking["uidb_candidate_uidb_id"], gt_trafficking["uidb_candidate_missing_person_id"]) in candidate_pairs
+                             and not any(u == gt_trafficking["uidb_noise_id"] for u, _ in candidate_pairs)})
+
+    ignored_hits = {h["uidb_id"] for h in detect_ignored_zipnet_match(conn)}
+    checks.append({"check": "uidb_ignored_zipnet_match_detected_resolved_silent",
+                   "passed": gt_trafficking["uidb_ignored_uidb_id"] in ignored_hits
+                             and gt_trafficking["uidb_clean_uidb_id"] not in ignored_hits})
+
+    unsampled_hits = {h["pm_id"] for h in detect_unsampled_body(conn)}
+    checks.append({"check": "uidb_unsampled_body_detected_sampled_silent",
+                   "passed": gt_trafficking["uidb_candidate_pm_id"] in unsampled_hits
+                             and gt_trafficking["uidb_clean_pm_id"] not in unsampled_hits})
+
+    late_dispatch_hits = {h["sample_id"] for h in detect_late_dna_dispatch(conn)}
+    checks.append({"check": "uidb_late_dna_dispatch_detected_prompt_silent",
+                   "passed": gt_trafficking["uidb_ignored_dna_sample_id"] in late_dispatch_hits
+                             and gt_trafficking["uidb_clean_dna_sample_id"] not in late_dispatch_hits})
+
+    weak_conclusion_hits = {h["sample_id"] for h in detect_weak_dna_conclusion_relied_alone(conn)}
+    checks.append({"check": "uidb_weak_dna_conclusion_relied_alone_detected_clean_silent",
+                   "passed": gt_trafficking["uidb_ignored_dna_sample_id"] in weak_conclusion_hits
+                             and gt_trafficking["uidb_clean_dna_sample_id"] not in weak_conclusion_hits})
 
     expected_top_case_type = {"C001": "FINANCIAL_FRAUD", "C002": "TRAFFICKING_MISSING_PERSON", "C003": "NARCOTICS",
                                "C004": "ROBBERY_THEFT", "C005": "ROBBERY_THEFT",

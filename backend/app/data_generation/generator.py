@@ -240,6 +240,54 @@ def add_tower_location_record(case_id, phone, day, hour, minute, **kwargs):
     return tid
 
 
+MP_SEQ = IdSeq("MP")
+UIDB_SEQ = IdSeq("UIDB")
+DNA_SAMPLE_SEQ = IdSeq("DNA")
+
+missing_person_report_rows = []
+uidb_record_rows = []
+dna_sample_record_rows = []
+
+
+def add_missing_person_report(case_id, day, **kwargs):
+    mpid = MP_SEQ.next()
+    missing_person_report_rows.append((
+        mpid, case_id, kwargs.get("fir_id"), kwargs.get("name"), kwargs.get("age"), kwargs.get("sex"),
+        kwargs.get("height_cm"), kwargs.get("build"), kwargs.get("complexion"), kwargs.get("hair"),
+        kwargs.get("clothing_description"), json.dumps(kwargs.get("dress_colour_tokens", [])),
+        kwargs.get("distinguishing_marks"), kwargs.get("last_seen_date"), kwargs.get("last_seen_place"),
+        kwargs.get("last_seen_circumstances"), kwargs.get("district"), kwargs.get("status", "OPEN"), dt(days=day),
+    ))
+    return mpid
+
+
+def add_uidb_record(case_id, day, **kwargs):
+    uid = UIDB_SEQ.next()
+    uidb_record_rows.append((
+        uid, case_id, kwargs.get("uidb_serial_no"), kwargs.get("state"), kwargs.get("district"),
+        kwargs.get("police_station"), kwargs.get("age_from"), kwargs.get("age_to"), kwargs.get("sex"),
+        kwargs.get("found_date"), kwargs.get("height_cm"), kwargs.get("religion"), kwargs.get("dd_number"),
+        kwargs.get("dd_date"), kwargs.get("fir_no"), kwargs.get("found_place"), kwargs.get("parentage"),
+        kwargs.get("address"), kwargs.get("build"), kwargs.get("complexion"), kwargs.get("face"),
+        kwargs.get("hair"), kwargs.get("eyes"), kwargs.get("beard"), kwargs.get("mustaches"),
+        kwargs.get("dress_upper"), kwargs.get("dress_upper_colour"), kwargs.get("dress_lower"),
+        kwargs.get("dress_lower_colour"), kwargs.get("remarks"), kwargs.get("police_post"), kwargs.get("pm_id"),
+        kwargs.get("reward_amount"), kwargs.get("notification_no"), kwargs.get("notification_date"),
+        kwargs.get("matched_missing_serial_no"), kwargs.get("matching_date"), dt(days=day),
+    ))
+    return uid
+
+
+def add_dna_sample_record(case_id, pm_id, day, **kwargs):
+    sid = DNA_SAMPLE_SEQ.next()
+    dna_sample_record_rows.append((
+        sid, case_id, pm_id, kwargs.get("sample_source"), kwargs.get("collected_ts"), kwargs.get("dispatch_ts"),
+        kwargs.get("dispatch_delay_reason"), kwargs.get("conclusion_category"),
+        int(kwargs.get("expert_examined", False)), dt(days=day),
+    ))
+    return sid
+
+
 # ---------------------------------------------------------------------------
 # CASE 1: Fraud Ring Alpha
 # ---------------------------------------------------------------------------
@@ -434,6 +482,117 @@ for i, day in enumerate([12, 33, 55, 90]):
     add_fir(CASE_FRAUD if i % 2 == 0 else CASE_TRAFFICKING, STATION_NAME, day,
             f"Routine complaint number {i+1} regarding a minor property dispute was filed and closed.")
 
+# --- UIDB (Unidentified Dead Body) <-> missing-person Physical-evidence
+# vertical slice (Sept 2026 pivot, module 4), joined into the SAME case as
+# the live-trafficking Digital signals above, per the research pass's own
+# recommendation that the two be modeled together, not as unrelated tables.
+#
+# MP_A / UIDB_A: an unmatched candidate pair -- demographics/dress/date/
+# district all line up, but ZIPNET's matched_missing_serial_no is still
+# empty. Its post-mortem has NO DNA sample at all.
+MP_A = add_missing_person_report(
+    CASE_TRAFFICKING, day=140, name="Priya Sharma", age=22, sex="FEMALE", height_cm=160.0,
+    build="Slim", complexion="Fair", hair="Black, long", clothing_description="Red kurta and blue jeans",
+    dress_colour_tokens=["red", "blue"], distinguishing_marks="Mole on left cheek",
+    last_seen_date=dt(days=140), last_seen_place="Sonepur Junction",
+    last_seen_circumstances="Last seen boarding a bus", district="Sonepur", status="OPEN",
+)
+PM_UIDB_A = add_post_mortem_report(
+    CASE_TRAFFICKING, day=155, deceased_name=None, date_of_death=dt(days=154), date_of_postmortem=dt(days=155),
+    doctor_name="Dr. Alka Mehta", place="Sonepur District Mortuary", cause_of_death="Drowning",
+    injury_list=[], rectal_temperature=30.1, rigor_mortis_state="Passing off", rigor_mortis_time_estimate="18-24 hours",
+    viscera_preserved=1, viscera_sent_to_fsl_ts=dt(days=156),
+)
+UIDB_A = add_uidb_record(
+    CASE_TRAFFICKING, day=155, uidb_serial_no="UIDB-2026-0091", state="State X", district="Sonepur",
+    police_station=STATION_NAME, age_from=20, age_to=25, sex="FEMALE", found_date=dt(days=155), height_cm=161.0,
+    religion="Hindu", dd_number="DD-441", dd_date=dt(days=155), found_place="Riverbank near Sonepur Junction",
+    parentage="D/O Ram Sharma", address="Unknown", build="Slim", complexion="Fair", face="Oval", hair="Black",
+    eyes="Black", beard=None, mustaches=None, dress_upper="Kurta", dress_upper_colour="Red",
+    dress_lower="Jeans", dress_lower_colour="Blue", remarks="Mole noted on left cheek",
+    police_post="Sonepur Outpost", pm_id=PM_UIDB_A, notification_no="NOTIF-2026-018", notification_date=dt(days=156),
+    matched_missing_serial_no=None, matching_date=None,
+)
+
+# MP_B / UIDB_B: ZIPNET already populated matched_missing_serial_no, but
+# MP_B's case is still shown OPEN -- the "ignored match" signal. Its DNA
+# sample was dispatched 72h after collection (no reason recorded) and
+# came back INCONCLUSIVE with no examining expert, yet is the sole basis
+# ZIPNET used for the match.
+MP_B = add_missing_person_report(
+    CASE_TRAFFICKING, day=145, name="Sunita Yadav", age=30, sex="FEMALE", height_cm=155.0,
+    build="Medium", complexion="Dark", hair="Black, short", clothing_description="Green saree",
+    dress_colour_tokens=["green"], distinguishing_marks="Scar on right hand",
+    last_seen_date=dt(days=145), last_seen_place="MG Road area",
+    last_seen_circumstances="Did not return home from work", district="MG Road", status="OPEN",
+)
+PM_UIDB_B = add_post_mortem_report(
+    CASE_TRAFFICKING, day=156, deceased_name=None, date_of_death=dt(days=155), date_of_postmortem=dt(days=156),
+    doctor_name="Dr. Alka Mehta", place="Sonepur District Mortuary", cause_of_death="Undetermined",
+    injury_list=[], rectal_temperature=29.0, rigor_mortis_state="Fully established", rigor_mortis_time_estimate="12-18 hours",
+    viscera_preserved=1, viscera_sent_to_fsl_ts=dt(days=157),
+)
+UIDB_B = add_uidb_record(
+    CASE_TRAFFICKING, day=156, uidb_serial_no="UIDB-2026-0094", state="State X", district="MG Road",
+    police_station="MG Road Police Station", age_from=28, age_to=33, sex="FEMALE", found_date=dt(days=156),
+    height_cm=156.0, religion="Hindu", dd_number="DD-447", dd_date=dt(days=156), found_place="MG Road drain",
+    parentage="D/O Mohan Yadav", address="Unknown", build="Medium", complexion="Dark", face="Round",
+    hair="Black", eyes="Black", beard=None, mustaches=None, dress_upper="Saree", dress_upper_colour="Green",
+    dress_lower=None, dress_lower_colour=None, remarks="Scar noted on right hand", police_post="MG Road Outpost",
+    pm_id=PM_UIDB_B, notification_no="NOTIF-2026-021", notification_date=dt(days=157),
+    matched_missing_serial_no=MP_B, matching_date=dt(days=157),
+)
+DNA_B = add_dna_sample_record(
+    CASE_TRAFFICKING, PM_UIDB_B, day=156, sample_source="MOLAR_TOOTH",
+    collected_ts=dt(days=156), dispatch_ts=dt(days=159), dispatch_delay_reason=None,
+    conclusion_category="INCONCLUSIVE", expert_examined=False,
+)
+
+# MP_C / UIDB_C: fully compliant -- ZIPNET-matched, case correctly closed
+# out, DNA dispatched within 24h with an examined expert and a clean
+# MATCHES conclusion. Proves zero false positives across all four checks.
+MP_C = add_missing_person_report(
+    CASE_TRAFFICKING, day=150, name="Rekha Singh", age=40, sex="FEMALE", height_cm=150.0,
+    build="Heavy", complexion="Fair", hair="Grey, short", clothing_description="Yellow salwar",
+    dress_colour_tokens=["yellow"], distinguishing_marks="None recorded",
+    last_seen_date=dt(days=150), last_seen_place="Cyber Crime Cell jurisdiction",
+    last_seen_circumstances="Did not return from a scheduled visit", district="Cyber Crime Cell", status="RESOLVED",
+)
+PM_UIDB_C = add_post_mortem_report(
+    CASE_TRAFFICKING, day=157, deceased_name="Rekha Singh", date_of_death=dt(days=156), date_of_postmortem=dt(days=157),
+    doctor_name="Dr. Alka Mehta", place="Sonepur District Mortuary", cause_of_death="Cardiac arrest",
+    injury_list=[], rectal_temperature=31.0, rigor_mortis_state="Fully established", rigor_mortis_time_estimate="10-14 hours",
+    viscera_preserved=1, viscera_sent_to_fsl_ts=dt(days=158),
+)
+UIDB_C = add_uidb_record(
+    CASE_TRAFFICKING, day=157, uidb_serial_no="UIDB-2026-0097", state="State X", district="Cyber Crime Cell",
+    police_station="Cyber Crime Cell", age_from=38, age_to=43, sex="FEMALE", found_date=dt(days=157),
+    height_cm=150.0, religion="Hindu", dd_number="DD-452", dd_date=dt(days=157), found_place="Cyber Crime Cell jurisdiction",
+    parentage="D/O Late Mohan Singh", address="Known, next of kin informed", build="Heavy", complexion="Fair",
+    face="Round", hair="Grey", eyes="Black", beard=None, mustaches=None, dress_upper="Salwar",
+    dress_upper_colour="Yellow", dress_lower=None, dress_lower_colour=None, remarks="Identified by family",
+    police_post="Cyber Crime Cell", pm_id=PM_UIDB_C, notification_no="NOTIF-2026-024", notification_date=dt(days=158),
+    matched_missing_serial_no=MP_C, matching_date=dt(days=158),
+)
+DNA_C = add_dna_sample_record(
+    CASE_TRAFFICKING, PM_UIDB_C, day=157, sample_source="STERNUM",
+    collected_ts=dt(days=157), dispatch_ts=dt(days=158), dispatch_delay_reason=None,
+    conclusion_category="MATCHES", expert_examined=True,
+)
+
+# UIDB_NOISE: different sex/age/district entirely -- must never be
+# suggested as a candidate match for MP_A, MP_B, or MP_C.
+UIDB_NOISE = add_uidb_record(
+    CASE_TRAFFICKING, day=158, uidb_serial_no="UIDB-2026-0099", state="State X", district="Faraway District",
+    police_station="Faraway Police Station", age_from=50, age_to=60, sex="MALE", found_date=dt(days=158),
+    height_cm=172.0, religion="Hindu", dd_number="DD-460", dd_date=dt(days=158), found_place="Faraway highway",
+    parentage="S/O Unknown", address="Unknown", build="Heavy", complexion="Dark", face="Square", hair="Grey",
+    eyes="Black", beard="Bearded", mustaches="Yes", dress_upper="Bushirt", dress_upper_colour="White",
+    dress_lower="Trousers", dress_lower_colour="Black", remarks="No identification marks noted",
+    police_post="Faraway Outpost", pm_id=None, notification_no="NOTIF-2026-026", notification_date=dt(days=159),
+    matched_missing_serial_no=None, matching_date=None,
+)
+
 ground_truth["cases"][CASE_TRAFFICKING] = {
     "title": "Missing Persons - Sonepur Corridor",
     "recruiter": RECRUITER,
@@ -444,6 +603,12 @@ ground_truth["cases"][CASE_TRAFFICKING] = {
     "repeat_location": {"name": LOCATION_NAME, "min_independent_sources": 3},
     "mundane_station": STATION_NAME,
     "transporter_vehicle": TRANSPORTER_VEHICLE,
+    "uidb_candidate_missing_person_id": MP_A, "uidb_candidate_uidb_id": UIDB_A, "uidb_candidate_pm_id": PM_UIDB_A,
+    "uidb_ignored_missing_person_id": MP_B, "uidb_ignored_uidb_id": UIDB_B, "uidb_ignored_pm_id": PM_UIDB_B,
+    "uidb_ignored_dna_sample_id": DNA_B,
+    "uidb_clean_missing_person_id": MP_C, "uidb_clean_uidb_id": UIDB_C, "uidb_clean_pm_id": PM_UIDB_C,
+    "uidb_clean_dna_sample_id": DNA_C,
+    "uidb_noise_id": UIDB_NOISE,
 }
 
 # ---------------------------------------------------------------------------
@@ -927,6 +1092,29 @@ def generate(reset: bool = True):
         "INSERT INTO tower_location_record (record_id, case_id, phone, cell_id, locality_name, timestamp, "
         "is_certified_65b, certificate_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         tower_location_record_rows,
+    )
+    cur.executemany(
+        "INSERT INTO missing_person_report (missing_person_id, case_id, fir_id, name, age, sex, height_cm, "
+        "build, complexion, hair, clothing_description, dress_colour_tokens_json, distinguishing_marks, "
+        "last_seen_date, last_seen_place, last_seen_circumstances, district, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        missing_person_report_rows,
+    )
+    cur.executemany(
+        "INSERT INTO uidb_record (uidb_id, case_id, uidb_serial_no, state, district, police_station, "
+        "age_from, age_to, sex, found_date, height_cm, religion, dd_number, dd_date, fir_no, found_place, "
+        "parentage, address, build, complexion, face, hair, eyes, beard, mustaches, dress_upper, "
+        "dress_upper_colour, dress_lower, dress_lower_colour, remarks, police_post, pm_id, reward_amount, "
+        "notification_no, notification_date, matched_missing_serial_no, matching_date, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+        "?, ?, ?, ?, ?, ?, ?)",
+        uidb_record_rows,
+    )
+    cur.executemany(
+        "INSERT INTO dna_sample_record (sample_id, case_id, pm_id, sample_source, collected_ts, dispatch_ts, "
+        "dispatch_delay_reason, conclusion_category, expert_examined, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        dna_sample_record_rows,
     )
     cur.executemany(
         "INSERT INTO intel_records (record_id, case_id, source_category, reporting_unit, date, text) "

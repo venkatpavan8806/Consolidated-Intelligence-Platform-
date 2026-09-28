@@ -416,6 +416,118 @@ CREATE TABLE IF NOT EXISTS tower_location_record (
     certificate_ref TEXT,
     FOREIGN KEY(case_id) REFERENCES cases(case_id)
 );
+
+-- ---------------------------------------------------------------------
+-- Trafficking/Missing-Person Physical evidence: Unidentified Dead Body
+-- (UIDB) <-> missing-person candidate matching (Sept 2026 pivot, module 4).
+-- Deliberately joins to the SAME post_mortem_report table Assault/Homicide
+-- uses (via uidb_record.pm_id) rather than a duplicate table, per the
+-- research pass's explicit recommendation that the UIDB/DNA material is
+-- "the post-mortem/body-identification complement" to the live-trafficking
+-- digital signals, not an unrelated schema.
+-- ---------------------------------------------------------------------
+
+-- Missing-person intake fields (DE-G's field list, said to mirror NCRB's
+-- NCMP proforma but NOT independently verified against a government form
+-- by either research pass -- flagged [I] "best-effort draft, needs SME/
+-- police-officer review" rather than presented as a verified form, unlike
+-- the ZIPNET UIDB fields below which ARE verified).
+CREATE TABLE IF NOT EXISTS missing_person_report (
+    missing_person_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    fir_id TEXT,
+    name TEXT,
+    age INTEGER,
+    sex TEXT,  -- MALE | FEMALE | OTHER
+    height_cm REAL,
+    build TEXT,
+    complexion TEXT,
+    hair TEXT,
+    clothing_description TEXT,
+    dress_colour_tokens_json TEXT NOT NULL DEFAULT '[]',
+    distinguishing_marks TEXT,
+    last_seen_date TEXT,
+    last_seen_place TEXT,
+    last_seen_circumstances TEXT,
+    district TEXT,
+    status TEXT NOT NULL DEFAULT 'OPEN',  -- OPEN | RESOLVED | CLOSED
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id)
+);
+
+-- ZIPNET "Unidentified Persons Found" / UIDB "Add Record" fields, verbatim
+-- per the Delhi Police ZIPNET form the research pass verified --
+-- including matched_missing_serial_no, ZIPNET's OWN real cross-case-
+-- linking field (not a design proposal): the platform's job per the
+-- research is to detect when this field SHOULD be populated but isn't
+-- (see the candidate-match detector) and when it IS populated but the
+-- linked missing-person case is still shown open (the "ignored match"
+-- signal -- a real, exploitable data-quality/process-failure pattern).
+CREATE TABLE IF NOT EXISTS uidb_record (
+    uidb_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    uidb_serial_no TEXT,
+    state TEXT,
+    district TEXT,
+    police_station TEXT,
+    age_from INTEGER,
+    age_to INTEGER,
+    sex TEXT,
+    found_date TEXT,
+    height_cm REAL,
+    religion TEXT,
+    dd_number TEXT,
+    dd_date TEXT,
+    fir_no TEXT,
+    found_place TEXT,
+    parentage TEXT,
+    address TEXT,
+    build TEXT,
+    complexion TEXT,
+    face TEXT,
+    hair TEXT,
+    eyes TEXT,
+    beard TEXT,
+    mustaches TEXT,
+    dress_upper TEXT,
+    dress_upper_colour TEXT,
+    dress_lower TEXT,
+    dress_lower_colour TEXT,
+    remarks TEXT,
+    police_post TEXT,
+    pm_id TEXT,  -- links to post_mortem_report.pm_id (the shared spine, not a new table)
+    reward_amount REAL,
+    notification_no TEXT,
+    notification_date TEXT,
+    matched_missing_serial_no TEXT,  -- ZIPNET's own real UIDB<->missing-person link field
+    matching_date TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id),
+    FOREIGN KEY(pm_id) REFERENCES post_mortem_report(pm_id)
+);
+
+-- DNA sample chain-of-custody for an unidentified body, kept separate from
+-- forensic_match (which compares two named EXHIBITS) because this table
+-- tracks whether a sample was drawn and dispatched AT ALL, and how -- the
+-- "was a DNA sample even taken" question the Rajasthan HC/*Lokniti*
+-- preservation logic and *Kattavellai*'s 48-hour dispatch direction are
+-- both about. conclusion_category is categorical for the same reason it
+-- is on forensic_match: no Indian DNA report retrieved by the research
+-- states a likelihood ratio or percentage.
+CREATE TABLE IF NOT EXISTS dna_sample_record (
+    sample_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    pm_id TEXT,
+    sample_source TEXT,  -- MOLAR_TOOTH | STERNUM | BLOOD_ON_GAUZE | OTHER
+    collected_ts TEXT,
+    dispatch_ts TEXT,
+    dispatch_delay_reason TEXT,
+    conclusion_category TEXT,  -- MATCHES | EXCLUDES | DEGRADED_NO_PROFILE | INCONCLUSIVE
+    expert_examined INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id),
+    FOREIGN KEY(pm_id) REFERENCES post_mortem_report(pm_id)
+);
 """
 
 

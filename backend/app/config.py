@@ -170,6 +170,11 @@ CLASSIFIER_LEAD_TYPE_TO_CASE_TYPE = {
     "FORENSIC_CONFIDENCE_MISUSE": "ASSAULT_HOMICIDE",
     "UNCERTIFIED_TOWER_EVIDENCE": "ASSAULT_HOMICIDE",
     "SPATIOTEMPORAL_TOWER_CORRELATION": "ASSAULT_HOMICIDE",
+    "UIDB_MISSING_PERSON_CANDIDATE_MATCH": "TRAFFICKING_MISSING_PERSON",
+    "UIDB_IGNORED_ZIPNET_MATCH": "TRAFFICKING_MISSING_PERSON",
+    "UIDB_UNSAMPLED_BODY": "TRAFFICKING_MISSING_PERSON",
+    "UIDB_LATE_DNA_DISPATCH": "TRAFFICKING_MISSING_PERSON",
+    "UIDB_WEAK_DNA_CONCLUSION_RELIED_ALONE": "TRAFFICKING_MISSING_PERSON",
 }
 
 # Robbery/Theft Physical evidence (Vahan Samanvay / ZIPNET-modeled).
@@ -233,6 +238,16 @@ ASSAULT_MLC_SIMPLE_MAX_FOLLOWUP_DAYS = 20
 # system to test a real distance against, so locality-name matching stands
 # in for it, honestly, rather than silently.
 ASSAULT_TOWER_SPATIOTEMPORAL_WINDOW_HOURS = 2
+
+# Trafficking/Missing Person Physical evidence: UIDB <-> missing-person
+# candidate matching. Tolerances are the research pass's own proposed
+# figures ([I], since ZIPNET's live matching logic itself isn't published),
+# not statutory numbers.
+UIDB_AGE_TOLERANCE_YEARS = 5
+UIDB_HEIGHT_TOLERANCE_CM = 5
+# Kattavellai's own 48-hour DNA-sample-dispatch direction (see Part C sec.
+# C0 of the research pass) -- a real judicial figure, not a design default.
+UIDB_DNA_DISPATCH_MAX_HOURS = 48
 
 # Missing link recovery
 LINK_RECOVERY_MASK_FRACTION = 0.2

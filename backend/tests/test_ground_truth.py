@@ -23,6 +23,10 @@ from app.detectors.assault_homicide_physical import (
     detect_forensic_matches, detect_forensic_confidence_misuse,
 )
 from app.detectors.assault_homicide_digital import detect_uncertified_tower_evidence, detect_spatiotemporal_correlation
+from app.detectors.trafficking_physical import (
+    detect_uidb_missing_person_candidates, detect_ignored_zipnet_match, detect_unsampled_body,
+    detect_late_dna_dispatch, detect_weak_dna_conclusion_relied_alone,
+)
 from app.classification.case_type_classifier import (
     classify_case, suggest_case_types_for_case, score_keyword_signals,
 )
@@ -476,6 +480,52 @@ def test_spatiotemporal_tower_correlation_detected(conn):
     # The unrelated certified noise ping (different locality, different
     # time) must never correlate to this inquest.
     assert gt["tower_certified_noise_id"] not in by_record
+
+
+def test_uidb_missing_person_candidate_match_detected_noise_silent(conn):
+    gt = _gt()["cases"]["C002"]
+    hits = detect_uidb_missing_person_candidates(conn)
+    pairs = {(h["uidb_id"], h["missing_person_id"]) for h in hits}
+    assert (gt["uidb_candidate_uidb_id"], gt["uidb_candidate_missing_person_id"]) in pairs, \
+        "sex/age/height/dress-colour/date/district all lining up must produce a candidate match"
+
+    noise_id = gt["uidb_noise_id"]
+    assert not any(h["uidb_id"] == noise_id for h in hits), \
+        "a UIDB record with completely different demographics must never be suggested as a candidate"
+
+
+def test_uidb_ignored_zipnet_match_detected_and_resolved_case_silent(conn):
+    gt = _gt()["cases"]["C002"]
+    hits = {h["uidb_id"] for h in detect_ignored_zipnet_match(conn)}
+    assert gt["uidb_ignored_uidb_id"] in hits, \
+        "a UIDB already carrying ZIPNET's matched_missing_serial_no whose case is still OPEN must be flagged"
+    assert gt["uidb_clean_uidb_id"] not in hits, \
+        "a UIDB matched to a case correctly marked RESOLVED must not be flagged"
+
+
+def test_uidb_unsampled_body_detected_and_sampled_bodies_silent(conn):
+    gt = _gt()["cases"]["C002"]
+    hits = {h["pm_id"] for h in detect_unsampled_body(conn)}
+    assert gt["uidb_candidate_pm_id"] in hits, "a post-mortem with no DNA sample record at all must be flagged"
+    assert gt["uidb_ignored_pm_id"] not in hits
+    assert gt["uidb_clean_pm_id"] not in hits
+
+
+def test_uidb_late_dna_dispatch_detected_and_prompt_dispatch_silent(conn):
+    gt = _gt()["cases"]["C002"]
+    hits = {h["sample_id"]: h for h in detect_late_dna_dispatch(conn)}
+    assert gt["uidb_ignored_dna_sample_id"] in hits and hits[gt["uidb_ignored_dna_sample_id"]]["hours_elapsed"] == 72.0
+    assert gt["uidb_clean_dna_sample_id"] not in hits, \
+        "a sample dispatched within 48 hours must not be flagged"
+
+
+def test_uidb_weak_dna_conclusion_relied_alone_detected_and_clean_case_silent(conn):
+    gt = _gt()["cases"]["C002"]
+    hits = {h["sample_id"] for h in detect_weak_dna_conclusion_relied_alone(conn)}
+    assert gt["uidb_ignored_dna_sample_id"] in hits, \
+        "an INCONCLUSIVE, unexamined sample used as the basis for a ZIPNET match must be flagged"
+    assert gt["uidb_clean_dna_sample_id"] not in hits, \
+        "a MATCHES conclusion from an examined expert must never be flagged"
 
 
 def test_masked_edge_recovery_runs_and_reports_recall(conn):
