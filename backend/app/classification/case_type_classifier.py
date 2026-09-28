@@ -82,6 +82,7 @@ def score_structural_signals(conn, case_id: str):
     relevant = [
         l for l in all_leads
         if case_node_ids.intersection(l["entities_involved"]) or l.get("case_id") == case_id
+        or case_id in l.get("case_ids", ())
     ]
 
     hits = defaultdict(lambda: defaultdict(list))  # case_type -> lead_type -> [lead_id,...]

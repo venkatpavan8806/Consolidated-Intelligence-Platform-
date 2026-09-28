@@ -154,7 +154,44 @@ CLASSIFIER_LEAD_TYPE_TO_CASE_TYPE = {
     "WOMEN_SAFETY_TRANSPORTER": "TRAFFICKING_MISSING_PERSON",
     "REPEAT_LOCATION": "TRAFFICKING_MISSING_PERSON",
     "NDPS_COMPLIANCE": "NARCOTICS",
+    "ROBBERY_VEHICLE_LINK": "ROBBERY_THEFT",
+    "ROBBERY_PROPERTY_MATCH": "ROBBERY_THEFT",
+    "ROBBERY_LINGERING_PROPERTY": "ROBBERY_THEFT",
+    "ROBBERY_MO_SERIES": "ROBBERY_THEFT",
+    "ROBBERY_MO_SERIES_S112_CANDIDATE": "ROBBERY_THEFT",
 }
+
+# Robbery/Theft Physical evidence (Vahan Samanvay / ZIPNET-modeled).
+# "Any two parameters from Registration/Chassis/Engine with partial Nos." is
+# NCRB's own published matching rule (Vahan Samanvay FAQ) -- implemented
+# here as: identical, or the last N characters identical (a partial-plate/
+# partial-chassis match), for at least this many of the three fields.
+ROBBERY_VEHICLE_MATCH_MIN_FIELDS = 2
+ROBBERY_VEHICLE_PARTIAL_MATCH_SUFFIX_LEN = 4  # [I] design choice -- NCRB's FAQ says "partial" but does not specify a suffix length
+# Non-vehicle property (a described item with no hard identifier): treated
+# as a candidate match, never a LINK, when description matches and the
+# recovered value sits within this fraction of the reported stolen value.
+ROBBERY_PROPERTY_VALUE_MATCH_TOLERANCE_FRACTION = 0.20
+# Recovered property sitting in the Malkhana with no court-disposal event
+# this long after seizure -- a BNSS 497/503 (interim custody/disposal)
+# lapse. [I] design default, not an official figure (research flagged this
+# threshold as unspecified in primary sources).
+ROBBERY_LINGERING_PROPERTY_MAX_DAYS = 90
+
+# Robbery/Theft Digital evidence: NCRB IIF-II Crime Details Form MO-series
+# rule. Research spec: ">=4 of 6 fields equal AND within 5 km AND within
+# 60 days" -- the 5 km geo-proximity leg is dropped here because this
+# system has no geocoded location records to test it against (an honest,
+# documented simplification, not a silent omission); the remaining 6-field
+# comparison and day window are implemented as specified.
+MO_SERIES_FIELDS = ["method_1", "conveyance", "character_assumed", "place_type", "property_type", "time_of_day_band"]
+MO_SERIES_MIN_MATCHING_FIELDS = 4
+MO_SERIES_MAX_DAYS_APART = 60
+# A matched series with this many shared accused across its FIRs clears the
+# BNS s.112 (petty organised crime) bar -- notably lower than s.111/MCOCA,
+# which needs a charge-sheet-count history (see Organized Crime, not yet
+# built).
+MO_SERIES_MIN_SHARED_ACCUSED_FOR_S112 = 2
 
 # Missing link recovery
 LINK_RECOVERY_MASK_FRACTION = 0.2
