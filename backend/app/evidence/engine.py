@@ -31,6 +31,9 @@ from app.detectors.trafficking_physical import (
     detect_uidb_missing_person_candidates, detect_ignored_zipnet_match, detect_unsampled_body,
     detect_late_dna_dispatch, detect_weak_dna_conclusion_relied_alone,
 )
+from app.detectors.organized_crime_digital import (
+    detect_cross_case_identifier_links, detect_shared_infrastructure, detect_syndicate_charge_sheet_threshold,
+)
 
 
 def _lead_id(lead_type: str, key: str) -> str:
@@ -661,12 +664,85 @@ def build_trafficking_physical_leads(conn):
     return leads
 
 
+def build_organized_crime_digital_leads(conn):
+    """Digital-evidence leads for Organized Crime: cross-case identifier
+    reuse, shared-infrastructure evidence, and the BNS s.111/MCOCA
+    charge-sheet legal gate. See app/detectors/organized_crime_digital.py
+    for the full legal grounding. All of these genuinely span multiple
+    case files, so every lead here carries case_ids (plural)."""
+    leads = []
+
+    for hit in detect_cross_case_identifier_links(conn):
+        lead_type = "INTERSTATE_IDENTIFIER_LINKAGE_ALERT" if hit["interstate_alert"] else "CROSS_CASE_IDENTIFIER_LINK"
+        alert_note = (
+            f" Appearing in {len(hit['fir_nos'])} FIRs across {len(hit['police_stations'])} police "
+            f"station(s) clears the interstate-linkage bar -- a Samanvaya-style alert, not just a link."
+            if hit["interstate_alert"] else ""
+        )
+        leads.append({
+            "lead_id": _lead_id(lead_type, f"{hit['identifier_type']}_{hit['value']}"),
+            "lead_type": lead_type,
+            "severity": "HIGH" if hit["interstate_alert"] else "MEDIUM",
+            "case_id": hit["case_ids"][0],
+            "case_ids": hit["case_ids"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"{hit['identifier_type']} '{hit['value']}' recurs across {len(hit['fir_nos'])} FIRs "
+                       f"({', '.join(hit['fir_nos'])}) spanning {len(hit['case_ids'])} case file(s).{alert_note}",
+            "signals": [{"signal": "fir_count", "value": len(hit["fir_nos"])},
+                        {"signal": "police_station_count", "value": len(hit["police_stations"])}],
+            "source_record_ids": hit["fir_nos"],
+            "created_at": _now(),
+        })
+
+    for hit in detect_shared_infrastructure(conn):
+        leads.append({
+            "lead_id": _lead_id("SHARED_INFRASTRUCTURE_LINK", f"{hit['identifier_type']}_{hit['value']}"),
+            "lead_type": "SHARED_INFRASTRUCTURE_LINK",
+            "severity": "HIGH",
+            "case_id": hit["case_ids"][0],
+            "case_ids": hit["case_ids"],
+            "entities_involved": hit["accused_entity_ids"],
+            "requires_human_verification": True,
+            "summary": f"{len(hit['accused_entity_ids'])} distinct accused are tied to the same "
+                       f"{hit['identifier_type']} '{hit['value']}' across {len(hit['fir_nos'])} FIRs -- "
+                       f"same-cell co-membership evidence, independent of whether they were ever "
+                       f"co-accused on the same charge-sheet.",
+            "signals": [{"signal": "accused_count", "value": len(hit["accused_entity_ids"])}],
+            "source_record_ids": hit["fir_nos"],
+            "created_at": _now(),
+        })
+
+    for hit in detect_syndicate_charge_sheet_threshold(conn):
+        if not hit["threshold_met"]:
+            continue
+        member_labels = [entity_label(conn, m) for m in hit["syndicate_members"]]
+        leads.append({
+            "lead_id": _lead_id("SYNDICATE_S111_THRESHOLD_MET", "_".join(hit["syndicate_members"])),
+            "lead_type": "SYNDICATE_S111_THRESHOLD_MET",
+            "severity": "HIGH",
+            "case_id": None,
+            "entities_involved": hit["syndicate_members"],
+            "requires_human_verification": True,
+            "summary": f"Syndicate {{{', '.join(member_labels)}}} clears {hit['qualifying_count']} "
+                       f"qualifying charge-sheets ({', '.join(hit['qualifying_charge_sheet_ids'])}) within "
+                       f"the preceding 10 years -- the BNS s.111/MCOCA 'continuing unlawful activity' "
+                       f"threshold, counted per Zakir Abdul Mirajkar v. State of Maharashtra PER SYNDICATE, "
+                       f"not per individual accused. A court determination, never an automated one.",
+            "signals": [{"signal": "qualifying_charge_sheet_count", "value": hit["qualifying_count"]}],
+            "source_record_ids": hit["qualifying_charge_sheet_ids"],
+            "created_at": _now(),
+        })
+
+    return leads
+
+
 def build_all_leads(conn):
     return (
         build_leads(conn) + build_women_safety_leads(conn) + build_narcotics_physical_leads(conn)
         + build_robbery_theft_physical_leads(conn) + build_robbery_theft_digital_leads(conn)
         + build_assault_homicide_physical_leads(conn) + build_assault_homicide_digital_leads(conn)
-        + build_trafficking_physical_leads(conn)
+        + build_trafficking_physical_leads(conn) + build_organized_crime_digital_leads(conn)
     )
 
 

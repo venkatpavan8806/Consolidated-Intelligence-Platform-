@@ -288,6 +288,66 @@ def add_dna_sample_record(case_id, pm_id, day, **kwargs):
     return sid
 
 
+CHARGE_SHEET_SEQ = IdSeq("CS")
+
+charge_sheet_rows = []
+# (charge_sheet_id, fir_id) pairs -- charge_sheet_accused can't be inserted
+# at generation time because its entity_id is a resolved PERSON entity that
+# doesn't exist until app.resolution.resolver has run. Recorded here and
+# resolved by populate_charge_sheet_accused(conn), called from the pipeline
+# right after run_resolution(), the same way _accused_entity_ids() resolves
+# "the accused named in this FIR" everywhere else in the codebase (see
+# app/detectors/robbery_theft_digital.py) -- reusing entity resolution
+# output rather than inventing a second identity scheme for accused persons.
+charge_sheet_accused_by_fir = []
+
+
+def add_charge_sheet(case_id, fir_id, day, accused_fir_id=None, **kwargs):
+    """Plants a charge_sheet row. accused_fir_id (defaults to fir_id) names
+    the FIR whose ACCUSED-role PERSON mentions become this charge-sheet's
+    accused once resolution has run -- lets a charge-sheet reuse an FIR
+    already planted for another purpose (e.g. the MO-series FIRs) without
+    duplicating narrative text."""
+    csid = CHARGE_SHEET_SEQ.next()
+    charge_sheet_rows.append((
+        csid, case_id, fir_id, kwargs.get("cognizance_date"),
+        int(kwargs.get("offence_cognizable", True)), kwargs.get("max_punishment_years"), dt(days=day),
+    ))
+    charge_sheet_accused_by_fir.append((csid, accused_fir_id or fir_id))
+    return csid
+
+
+def populate_charge_sheet_accused(conn):
+    """Resolves charge_sheet_accused_by_fir into real charge_sheet_accused
+    rows, using the exact same accused-entity-resolution query as
+    _accused_entity_ids() in app/detectors/robbery_theft_digital.py. Must
+    run after app.resolution.resolver.run_resolution() (entities must
+    exist) and is idempotent (DELETE + re-insert) like
+    backfill_common_identifier_index."""
+    conn.execute("DELETE FROM charge_sheet_accused")
+    to_insert = []
+    seen = set()
+    for charge_sheet_id, fir_id in charge_sheet_accused_by_fir:
+        rows = conn.execute(
+            """SELECT DISTINCT mem.entity_id FROM entity_mentions em
+               JOIN mention_entity_map mem ON em.mention_id = mem.mention_id
+               WHERE em.source_record_id = ? AND em.fir_role = 'ACCUSED'""",
+            (fir_id,),
+        ).fetchall()
+        for r in rows:
+            key = (charge_sheet_id, r["entity_id"])
+            if key in seen:
+                continue
+            seen.add(key)
+            to_insert.append(key)
+    conn.executemany(
+        "INSERT INTO charge_sheet_accused (charge_sheet_id, entity_id) VALUES (?, ?)",
+        to_insert,
+    )
+    conn.commit()
+    return {"charge_sheet_accused_rows": len(to_insert)}
+
+
 # ---------------------------------------------------------------------------
 # CASE 1: Fraud Ring Alpha
 # ---------------------------------------------------------------------------
@@ -985,6 +1045,111 @@ ground_truth["cases"][CASE_ASSAULT_CLEAN] = {
 }
 
 # ---------------------------------------------------------------------------
+# CASE 9: Organized Crime - Interstate Vehicle Theft Syndicate (Sept 2026
+# pivot, module 6 -- the last of the six case types). Deliberately reuses
+# the Robbery/Theft ring's own identifiers (vehicle KA05AB1234, phones
+# 9830000001/9830000002/9830000009 from C004's MO-series FIRs) across new
+# FIRs filed in a DIFFERENT case at DIFFERENT police stations, so the
+# cross-case identifier links and interstate alert below are genuine
+# cross-CASE signals (same pattern as C004/C005 and C006/C007), not
+# same-case echoes. Also plants charge_sheet/charge_sheet_accused ground
+# truth exercising every filter in the BNS s.111/MCOCA legal gate,
+# including the *Zakir Abdul Mirajkar* per-syndicate-not-per-accused rule:
+# Suresh Pawar and Ramesh Yadav individually have only ONE qualifying
+# charge-sheet each, but their syndicate (connected via shared phone/
+# vehicle infrastructure with Iqbal Sheikh and Deepak Malhotra) has TWO.
+# ---------------------------------------------------------------------------
+CASE_ORGANIZED_CRIME = "C009"
+
+add_case_type(CASE_ORGANIZED_CRIME, "ORGANIZED_CRIME", status="CONFIRMED",
+              reason="seed data: interstate vehicle-theft syndicate, linked to C004 via shared identifiers")
+
+FIR_ORG_1 = add_fir(CASE_ORGANIZED_CRIME, "Neighbouring State Task Force", 600,
+                     "Accused Iqbal Sheikh (phone 9830000002) and Accused Ramesh Yadav (phone 9830000009) "
+                     "were apprehended during a joint interstate raid, in possession of a Honda Activa "
+                     "motorcycle (registration KA05AB1234) traced to an earlier theft, and were found "
+                     "operating a vehicle-theft racket across state lines.")
+FIR_ORG_2 = add_fir(CASE_ORGANIZED_CRIME, "Interstate Crime Cell", 650,
+                     "Accused Suresh Pawar (phone 9830000001) was found coordinating the vehicle-theft "
+                     "syndicate's interstate operations from outside the state, working alongside Accused "
+                     "Deepak Malhotra (phone 9830000005) in arranging onward sale of stolen vehicles.")
+# A minimal, otherwise-unconnected FIR used only to carry Deepak Malhotra's
+# charge-sheet-history exclusion tests (too-old / non-cognizable / low-
+# punishment) without cluttering the interstate-linkage narrative above.
+# Deepak is still part of the syndicate via his co-accusal with Suresh
+# Pawar on FIR_ORG_2 -- same phone 9830000005 in both FIRs so the two
+# mentions resolve to ONE confirmed PERSON entity (a shared hard identifier
+# is exactly what entity resolution requires to auto-merge a name across
+# records; see app/resolution/resolver.py).
+FIR_ORG_3 = add_fir(CASE_ORGANIZED_CRIME, "Records Cell", 100,
+                     "Accused Deepak Malhotra (phone 9830000005) was named in an earlier, unrelated case "
+                     "record retained for criminal-history reference.")
+# Negative control: a lone accused with no co-accusal and no shared
+# identifier with anyone else -- must never appear in any syndicate,
+# however many charge-sheets of his own he has, since BNS s.111/MCOCA
+# (s.2(1)(f)) define a syndicate as two or more persons.
+FIR_ORG_NEGATIVE = add_fir(CASE_ORGANIZED_CRIME, "Records Cell", 300,
+                           "Accused Manoj Bhatt (phone 9830099999) acted alone in an unrelated matter, "
+                           "with no known associates.")
+
+# --- Charge-sheet ground truth ---
+# CS_QUALIFY_1 and CS_QUALIFY_2 are the syndicate's only two qualifying
+# charge-sheets, and they charge two DIFFERENT, non-overlapping accused
+# sets (Suresh+Iqbal vs Ramesh alone) -- proving the s.111 count is taken
+# per syndicate, not per accused.
+CS_QUALIFY_1 = add_charge_sheet(
+    CASE_ROBBERY, FIR_MO_1, day=235, accused_fir_id=FIR_MO_1,
+    cognizance_date=dt(days=235), offence_cognizable=True, max_punishment_years=3,
+)
+CS_QUALIFY_2 = add_charge_sheet(
+    CASE_ROBBERY, FIR_MO_3, day=415, accused_fir_id=FIR_MO_3,
+    cognizance_date=dt(days=415), offence_cognizable=True, max_punishment_years=4,
+)
+# CS_TOO_OLD: otherwise-qualifying, but its cognizance_date falls outside
+# the 10-year lookback measured from the syndicate's latest cognizance
+# date (day 425 below) -- excluded by the lookback window alone.
+CS_TOO_OLD = add_charge_sheet(
+    CASE_ORGANIZED_CRIME, FIR_ORG_3, day=425 - 3700, accused_fir_id=FIR_ORG_3,
+    cognizance_date=dt(days=425 - 3700), offence_cognizable=True, max_punishment_years=5,
+)
+# CS_NOT_COGNIZABLE: within the lookback window and above the punishment
+# floor, excluded only because the offence is not cognizable.
+CS_NOT_COGNIZABLE = add_charge_sheet(
+    CASE_ORGANIZED_CRIME, FIR_ORG_3, day=420, accused_fir_id=FIR_ORG_3,
+    cognizance_date=dt(days=420), offence_cognizable=False, max_punishment_years=5,
+)
+# CS_LOW_PUNISHMENT: within the lookback window and cognizable, excluded
+# only because max_punishment_years falls below the 3-year floor.
+CS_LOW_PUNISHMENT = add_charge_sheet(
+    CASE_ORGANIZED_CRIME, FIR_ORG_3, day=425, accused_fir_id=FIR_ORG_3,
+    cognizance_date=dt(days=425), offence_cognizable=True, max_punishment_years=2,
+)
+# CS_NEGATIVE_LONE: a single-accused charge-sheet that would qualify on its
+# own merits -- proves a lone accused never forms a "syndicate" of one.
+CS_NEGATIVE_LONE = add_charge_sheet(
+    CASE_ORGANIZED_CRIME, FIR_ORG_NEGATIVE, day=305, accused_fir_id=FIR_ORG_NEGATIVE,
+    cognizance_date=dt(days=305), offence_cognizable=True, max_punishment_years=5,
+)
+
+ground_truth["cases"][CASE_ORGANIZED_CRIME] = {
+    "title": "Organized Crime - Interstate Vehicle Theft Syndicate",
+    "linked_case_id": CASE_ROBBERY,
+    "shared_vehicle": "KA05AB1234",
+    "shared_phones_interstate": ["9830000001", "9830000002"],
+    "shared_phone_cross_case_only": "9830000009",
+    "cross_case_link_min_firs": 2,
+    "interstate_alert_min_firs": 3,
+    "syndicate_accused_names": ["Suresh Pawar", "Iqbal Sheikh", "Ramesh Yadav", "Deepak Malhotra"],
+    "qualifying_charge_sheet_ids": [CS_QUALIFY_1, CS_QUALIFY_2],
+    "excluded_too_old_charge_sheet_id": CS_TOO_OLD,
+    "excluded_not_cognizable_charge_sheet_id": CS_NOT_COGNIZABLE,
+    "excluded_low_punishment_charge_sheet_id": CS_LOW_PUNISHMENT,
+    "negative_control_lone_accused": "Manoj Bhatt",
+    "negative_control_lone_charge_sheet_id": CS_NEGATIVE_LONE,
+    "negative_control_fir_id": FIR_ORG_NEGATIVE,
+}
+
+# ---------------------------------------------------------------------------
 # Background noise: unrelated random activity for realism / false-positive testing
 # ---------------------------------------------------------------------------
 NOISE_PHONES = [f"97000{str(i).zfill(5)}" for i in range(1, 25)]
@@ -1017,6 +1182,7 @@ def generate(reset: bool = True):
             (CASE_ASSAULT, "Assault/Homicide - Riverside Custodial Death", "assault_homicide", dt(days=500)),
             (CASE_ASSAULT_COLDCASE, "Assault/Homicide - Riverside Cold Case", "assault_homicide", dt(days=100)),
             (CASE_ASSAULT_CLEAN, "Assault/Homicide - Lakeview Compliant Investigation", "assault_homicide", dt(days=520)),
+            (CASE_ORGANIZED_CRIME, "Organized Crime - Interstate Vehicle Theft Syndicate", "organized_crime", dt(days=600)),
         ],
     )
     cur.executemany(
@@ -1115,6 +1281,11 @@ def generate(reset: bool = True):
         "dispatch_delay_reason, conclusion_category, expert_examined, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         dna_sample_record_rows,
+    )
+    cur.executemany(
+        "INSERT INTO charge_sheet (charge_sheet_id, case_id, fir_id, cognizance_date, offence_cognizable, "
+        "max_punishment_years, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        charge_sheet_rows,
     )
     cur.executemany(
         "INSERT INTO intel_records (record_id, case_id, source_category, reporting_unit, date, text) "

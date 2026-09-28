@@ -136,6 +136,12 @@ def data_source_coverage(conn):
     sources.append({"source": "Unidentified Dead Body (ZIPNET/UIDB) records", "record_count": uidb_count})
     dna_count = conn.execute("SELECT COUNT(*) AS n FROM dna_sample_record").fetchone()["n"]
     sources.append({"source": "DNA sample chain-of-custody records", "record_count": dna_count})
+    identifier_count = conn.execute("SELECT COUNT(*) AS n FROM common_identifier_index").fetchone()["n"]
+    sources.append({"source": "Common identifier index (MSISDN/ACCOUNT/VEHICLE_REG/ACCUSED_ID)", "record_count": identifier_count})
+    charge_sheet_count = conn.execute("SELECT COUNT(*) AS n FROM charge_sheet").fetchone()["n"]
+    sources.append({"source": "Charge-sheet records (BNS s.111/MCOCA)", "record_count": charge_sheet_count})
+    charge_sheet_accused_count = conn.execute("SELECT COUNT(*) AS n FROM charge_sheet_accused").fetchone()["n"]
+    sources.append({"source": "Charge-sheet accused join records", "record_count": charge_sheet_accused_count})
     return sources
 
 
@@ -168,6 +174,9 @@ def check_detector_hits(conn):
     from app.detectors.trafficking_physical import (
         detect_uidb_missing_person_candidates, detect_ignored_zipnet_match, detect_unsampled_body,
         detect_late_dna_dispatch, detect_weak_dna_conclusion_relied_alone,
+    )
+    from app.detectors.organized_crime_digital import (
+        detect_cross_case_identifier_links, detect_shared_infrastructure, detect_syndicate_charge_sheet_threshold,
     )
     from app.classification.case_type_classifier import classify_case
 
@@ -289,9 +298,57 @@ def check_detector_hits(conn):
                    "passed": gt_trafficking["uidb_ignored_dna_sample_id"] in weak_conclusion_hits
                              and gt_trafficking["uidb_clean_dna_sample_id"] not in weak_conclusion_hits})
 
+    gt_org = gt["cases"]["C009"]
+
+    cross_case_hits = {h["value"]: h for h in detect_cross_case_identifier_links(conn)}
+    vehicle_hit = cross_case_hits.get(gt_org["shared_vehicle"])
+    checks.append({"check": "organized_crime_cross_case_vehicle_link_detected",
+                   "passed": bool(vehicle_hit and set(vehicle_hit["case_ids"]) == {gt_org["linked_case_id"], "C009"}
+                                  and not vehicle_hit["interstate_alert"])})
+
+    interstate_ok = all(
+        cross_case_hits.get(phone) is not None and cross_case_hits[phone]["interstate_alert"]
+        for phone in gt_org["shared_phones_interstate"]
+    )
+    checks.append({"check": "organized_crime_interstate_alert_detected", "passed": interstate_ok})
+
+    cross_case_only_hit = cross_case_hits.get(gt_org["shared_phone_cross_case_only"])
+    checks.append({"check": "organized_crime_cross_case_link_below_interstate_threshold_stays_link",
+                   "passed": bool(cross_case_only_hit and not cross_case_only_hit["interstate_alert"])})
+
+    shared_infra_hits = {h["value"] for h in detect_shared_infrastructure(conn)}
+    checks.append({"check": "organized_crime_shared_infrastructure_detected",
+                   "passed": gt_org["shared_vehicle"] in shared_infra_hits
+                             and all(p in shared_infra_hits for p in gt_org["shared_phones_interstate"])})
+
+    syndicate_hits = detect_syndicate_charge_sheet_threshold(conn)
+    matching_syndicate = next(
+        (h for h in syndicate_hits if set(gt_org["qualifying_charge_sheet_ids"]).issubset(set(h["qualifying_charge_sheet_ids"]))),
+        None,
+    )
+    checks.append({"check": "organized_crime_syndicate_s111_threshold_met_per_syndicate_not_per_accused",
+                   "passed": bool(matching_syndicate and matching_syndicate["threshold_met"]
+                                  and matching_syndicate["qualifying_count"] == 2)})
+
+    excluded_ids = {gt_org["excluded_too_old_charge_sheet_id"], gt_org["excluded_not_cognizable_charge_sheet_id"],
+                    gt_org["excluded_low_punishment_charge_sheet_id"]}
+    checks.append({"check": "organized_crime_charge_sheet_exclusion_filters_applied",
+                   "passed": bool(matching_syndicate) and excluded_ids.isdisjoint(set(matching_syndicate["qualifying_charge_sheet_ids"]))})
+
+    lone_entity = conn.execute(
+        "SELECT entity_id FROM charge_sheet_accused WHERE charge_sheet_id=?",
+        (gt_org["negative_control_lone_charge_sheet_id"],),
+    ).fetchone()
+    lone_never_in_syndicate = not any(
+        lone_entity and lone_entity["entity_id"] in h["syndicate_members"] for h in syndicate_hits
+    )
+    checks.append({"check": "organized_crime_lone_accused_never_forms_syndicate",
+                   "passed": lone_never_in_syndicate})
+
     expected_top_case_type = {"C001": "FINANCIAL_FRAUD", "C002": "TRAFFICKING_MISSING_PERSON", "C003": "NARCOTICS",
                                "C004": "ROBBERY_THEFT", "C005": "ROBBERY_THEFT",
-                               "C006": "ASSAULT_HOMICIDE", "C008": "ASSAULT_HOMICIDE"}
+                               "C006": "ASSAULT_HOMICIDE", "C008": "ASSAULT_HOMICIDE",
+                               "C009": "ORGANIZED_CRIME"}
     for case_id, expected_type in expected_top_case_type.items():
         suggestions = classify_case(conn, case_id)
         top_type = suggestions[0]["case_type"] if suggestions else None

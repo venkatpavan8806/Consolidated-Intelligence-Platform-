@@ -175,6 +175,10 @@ CLASSIFIER_LEAD_TYPE_TO_CASE_TYPE = {
     "UIDB_UNSAMPLED_BODY": "TRAFFICKING_MISSING_PERSON",
     "UIDB_LATE_DNA_DISPATCH": "TRAFFICKING_MISSING_PERSON",
     "UIDB_WEAK_DNA_CONCLUSION_RELIED_ALONE": "TRAFFICKING_MISSING_PERSON",
+    "CROSS_CASE_IDENTIFIER_LINK": "ORGANIZED_CRIME",
+    "INTERSTATE_IDENTIFIER_LINKAGE_ALERT": "ORGANIZED_CRIME",
+    "SHARED_INFRASTRUCTURE_LINK": "ORGANIZED_CRIME",
+    "SYNDICATE_S111_THRESHOLD_MET": "ORGANIZED_CRIME",
 }
 
 # Robbery/Theft Physical evidence (Vahan Samanvay / ZIPNET-modeled).
@@ -248,6 +252,20 @@ UIDB_HEIGHT_TOLERANCE_CM = 5
 # Kattavellai's own 48-hour DNA-sample-dispatch direction (see Part C sec.
 # C0 of the research pass) -- a real judicial figure, not a design default.
 UIDB_DNA_DISPATCH_MAX_HOURS = 48
+
+# Organized Crime. Cross-case identifier reuse and the BNS s.111 (<- MCOCA
+# s.2(1)(d)) charge-sheet legal gate.
+# "Same MSISDN/IMEI/account/VPA/vehicle reg appears in >=2 FIRs from
+# different police stations/states -> link edge; >=3 FIRs -> Samanvaya-
+# style interstate linkage alert" -- the research pass's own thresholds.
+ORGANIZED_CRIME_CROSS_CASE_LINK_MIN_FIRS = 2
+ORGANIZED_CRIME_INTERSTATE_ALERT_MIN_FIRS = 3
+# BNS s.111's own statutory text, verbatim: "more than one charge-sheet"
+# (i.e. count > 1, so >=2) "within the preceding period of ten years,"
+# for an offence "punishable ... for a term of three years or more."
+ORGANIZED_CRIME_CHARGE_SHEET_LOOKBACK_YEARS = 10
+ORGANIZED_CRIME_MIN_PUNISHMENT_YEARS = 3
+ORGANIZED_CRIME_MIN_QUALIFYING_CHARGE_SHEETS = 2
 
 # Missing link recovery
 LINK_RECOVERY_MASK_FRACTION = 0.2

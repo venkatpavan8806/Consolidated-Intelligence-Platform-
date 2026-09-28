@@ -5,11 +5,12 @@ import json
 from datetime import datetime, timezone
 
 from app.config import PIPELINE_TIMINGS_PATH
-from app.data_generation.generator import generate
+from app.data_generation.generator import generate, populate_charge_sheet_accused
 from app.extraction.extractor import run_extraction
 from app.resolution.resolver import run_resolution
 from app.graph.exclusion import run_exclusion
 from app.graph.builder import build_edges
+from app.linking.common_identifiers import backfill_common_identifier_index
 from app.auth.rbac import seed_case_assignments
 from app.db.schema import get_connection
 from app.audit.chain import append_entry
@@ -32,12 +33,24 @@ def run_full_pipeline(reset_data: bool = True) -> dict:
     timings["entity_resolution"] = round(time.time() - t0, 4)
 
     t0 = time.time()
+    conn = get_connection()
+    charge_sheet_accused_stats = populate_charge_sheet_accused(conn)
+    conn.close()
+    timings["charge_sheet_accused_backfill"] = round(time.time() - t0, 4)
+
+    t0 = time.time()
     exclusion_stats = run_exclusion()
     timings["role_utility_exclusion"] = round(time.time() - t0, 4)
 
     t0 = time.time()
     edge_stats = build_edges()
     timings["graph_construction"] = round(time.time() - t0, 4)
+
+    t0 = time.time()
+    conn = get_connection()
+    identifier_index_stats = backfill_common_identifier_index(conn)
+    conn.close()
+    timings["identifier_index_backfill"] = round(time.time() - t0, 4)
 
     seed_case_assignments()
     timings["total"] = round(time.time() - run_started, 4)
@@ -57,6 +70,8 @@ def run_full_pipeline(reset_data: bool = True) -> dict:
             "entities_created": resolution_stats["entities_created"],
             "review_clusters": resolution_stats["review_clusters"],
             "graph_edges": edge_stats["edges_created"],
+            "common_identifiers_indexed": identifier_index_stats["identifiers_indexed"],
+            "charge_sheet_accused_rows": charge_sheet_accused_stats["charge_sheet_accused_rows"],
         },
         "run_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "data_generation": gen_stats,
@@ -64,6 +79,7 @@ def run_full_pipeline(reset_data: bool = True) -> dict:
         "resolution": resolution_stats,
         "exclusion": exclusion_stats,
         "graph": edge_stats,
+        "identifier_index": identifier_index_stats,
     }
 
     # Persisted separately from the audit chain (which can be legitimately

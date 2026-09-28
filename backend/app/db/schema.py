@@ -528,6 +528,44 @@ CREATE TABLE IF NOT EXISTS dna_sample_record (
     FOREIGN KEY(case_id) REFERENCES cases(case_id),
     FOREIGN KEY(pm_id) REFERENCES post_mortem_report(pm_id)
 );
+
+-- ---------------------------------------------------------------------
+-- Organized Crime (Sept 2026 pivot, module 5) -- the "reference case type"
+-- for the platform's whole cross-case-linking architecture, per the
+-- research pass, since Organized Crime is definitionally about linking
+-- multiple FIRs/charge-sheets to a syndicate, not just an investigative
+-- aid on top of a single case. This module is what finally populates
+-- common_identifier_index (see that table's original comment above) via
+-- app/linking/common_identifiers.py's backfill, rather than leaving it an
+-- unused placeholder.
+--
+-- charge_sheet + charge_sheet_accused implement BNS s.111 (<- MCOCA
+-- s.2(1)(d))'s own statutory test verbatim: "more than one charge-sheet...
+-- within the preceding period of ten years... that Court has taken
+-- cognizance," for a cognizable offence carrying >=3 years. Per *Zakir
+-- Abdul Mirajkar v. State of Maharashtra* (2022 LiveLaw (SC) 707) and
+-- *Kavitha Lankesh v. State of Karnataka* (2022) 12 SCC 753, this count is
+-- taken PER SYNDICATE, not per individual accused -- which is exactly why
+-- charge_sheet_accused is a many-to-many join, not a single accused column
+-- on charge_sheet.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS charge_sheet (
+    charge_sheet_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    fir_id TEXT,
+    cognizance_date TEXT,  -- NULL until a competent Court has taken cognizance
+    offence_cognizable INTEGER NOT NULL DEFAULT 1,
+    max_punishment_years INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id)
+);
+
+CREATE TABLE IF NOT EXISTS charge_sheet_accused (
+    charge_sheet_id TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    PRIMARY KEY (charge_sheet_id, entity_id),
+    FOREIGN KEY(charge_sheet_id) REFERENCES charge_sheet(charge_sheet_id)
+);
 """
 
 

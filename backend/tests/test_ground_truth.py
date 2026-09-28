@@ -27,6 +27,9 @@ from app.detectors.trafficking_physical import (
     detect_uidb_missing_person_candidates, detect_ignored_zipnet_match, detect_unsampled_body,
     detect_late_dna_dispatch, detect_weak_dna_conclusion_relied_alone,
 )
+from app.detectors.organized_crime_digital import (
+    detect_cross_case_identifier_links, detect_shared_infrastructure, detect_syndicate_charge_sheet_threshold,
+)
 from app.classification.case_type_classifier import (
     classify_case, suggest_case_types_for_case, score_keyword_signals,
 )
@@ -234,6 +237,10 @@ def test_classifier_suggests_correct_case_type_for_each_seeded_case(conn):
     top_c008 = classify_case(conn, "C008")
     assert top_c008 and top_c008[0]["case_type"] == "ASSAULT_HOMICIDE"
     assert top_c008[0]["confidence"] >= 0.5
+
+    top_c009 = classify_case(conn, "C009")
+    assert top_c009 and top_c009[0]["case_type"] == "ORGANIZED_CRIME"
+    assert top_c009[0]["confidence"] >= 0.5
 
 
 def test_classifier_never_overrides_a_confirmed_case_type(conn):
@@ -534,3 +541,100 @@ def test_masked_edge_recovery_runs_and_reports_recall(conn):
     for k in (10, 20, 50):
         assert f"recall_at_{k}" in result
         assert 0.0 <= result[f"recall_at_{k}"] <= 1.0
+
+
+def test_organized_crime_cross_case_identifier_link_detected(conn):
+    gt = _gt()["cases"]["C009"]
+    hits = {h["value"]: h for h in detect_cross_case_identifier_links(conn)}
+
+    vehicle_hit = hits.get(gt["shared_vehicle"])
+    assert vehicle_hit, "the vehicle reused between C004 and C009 must be found as a cross-case identifier link"
+    assert set(vehicle_hit["case_ids"]) == {gt["linked_case_id"], "C009"}, \
+        "the link must genuinely span two different case files, not echo within one case"
+    assert not vehicle_hit["interstate_alert"], \
+        "2 occurrences clears the cross-case-link bar but not the higher interstate-alert bar"
+
+    cross_case_only_hit = hits.get(gt["shared_phone_cross_case_only"])
+    assert cross_case_only_hit and not cross_case_only_hit["interstate_alert"]
+
+
+def test_organized_crime_interstate_identifier_linkage_alert_detected(conn):
+    gt = _gt()["cases"]["C009"]
+    hits = {h["value"]: h for h in detect_cross_case_identifier_links(conn)}
+    for phone in gt["shared_phones_interstate"]:
+        hit = hits.get(phone)
+        assert hit, f"phone {phone} must be found as a cross-case identifier link"
+        assert len(hit["fir_nos"]) >= gt["interstate_alert_min_firs"]
+        assert set(hit["case_ids"]) == {gt["linked_case_id"], "C009"}
+        assert hit["interstate_alert"], f"phone {phone} clears 3 distinct FIRs and must escalate to an interstate alert"
+
+
+def test_organized_crime_cross_case_link_excludes_accused_id(conn):
+    # ACCUSED_ID recurring across an accused's own FIRs is not, on its own,
+    # a cross-case *infrastructure* signal (see module docstring) -- only
+    # non-accused identifiers (phone/account/vehicle) are considered here.
+    hits = {h["identifier_type"] for h in detect_cross_case_identifier_links(conn)}
+    assert "ACCUSED_ID" not in hits
+
+
+def test_organized_crime_shared_infrastructure_detected(conn):
+    gt = _gt()["cases"]["C009"]
+    hits = {h["value"]: h for h in detect_shared_infrastructure(conn)}
+
+    vehicle_hit = hits.get(gt["shared_vehicle"])
+    assert vehicle_hit and len(vehicle_hit["accused_entity_ids"]) >= 2, \
+        "the shared vehicle's FIRs name >=2 distinct accused between them -- same-cell co-membership evidence"
+
+    for phone in gt["shared_phones_interstate"]:
+        phone_hit = hits.get(phone)
+        assert phone_hit and len(phone_hit["accused_entity_ids"]) >= 2
+
+
+def test_organized_crime_syndicate_qualifies_per_syndicate_not_per_accused(conn):
+    # The BNS s.111/MCOCA legal gate, per *Zakir Abdul Mirajkar v. State of
+    # Maharashtra*: Suresh Pawar and Ramesh Yadav each have exactly ONE
+    # qualifying charge-sheet of their own, charging non-overlapping
+    # accused sets -- yet their syndicate (connected via shared phone/
+    # vehicle infrastructure with Iqbal Sheikh and Deepak Malhotra) clears
+    # the >=2-charge-sheet threshold as a whole.
+    gt = _gt()["cases"]["C009"]
+    hits = detect_syndicate_charge_sheet_threshold(conn)
+    matching = [h for h in hits if set(gt["qualifying_charge_sheet_ids"]).issubset(set(h["qualifying_charge_sheet_ids"]))]
+    assert matching, "no syndicate found containing both planted qualifying charge-sheets"
+    syndicate = matching[0]
+    assert syndicate["threshold_met"]
+    assert syndicate["qualifying_count"] == 2
+    assert len(syndicate["syndicate_members"]) >= 4, \
+        "the syndicate must include all four linked accused (Suresh, Iqbal, Ramesh, Deepak)"
+
+
+def test_organized_crime_charge_sheet_exclusion_filters(conn):
+    gt = _gt()["cases"]["C009"]
+    hits = detect_syndicate_charge_sheet_threshold(conn)
+    matching = [h for h in hits if set(gt["qualifying_charge_sheet_ids"]).issubset(set(h["qualifying_charge_sheet_ids"]))]
+    assert matching
+    qualifying = set(matching[0]["qualifying_charge_sheet_ids"])
+
+    assert gt["excluded_too_old_charge_sheet_id"] not in qualifying, \
+        "a charge-sheet outside the 10-year lookback must not count toward the threshold"
+    assert gt["excluded_not_cognizable_charge_sheet_id"] not in qualifying, \
+        "a non-cognizable-offence charge-sheet must not count toward the threshold"
+    assert gt["excluded_low_punishment_charge_sheet_id"] not in qualifying, \
+        "a charge-sheet with max_punishment_years below the 3-year floor must not count toward the threshold"
+
+
+def test_organized_crime_lone_accused_never_forms_syndicate(conn):
+    # BNS s.111/MCOCA (s.2(1)(f)) define a syndicate as two or more
+    # persons -- a lone accused, however many qualifying charge-sheets of
+    # his own, must never appear in any syndicate's member list.
+    gt = _gt()["cases"]["C009"]
+    row = conn.execute(
+        "SELECT entity_id FROM charge_sheet_accused WHERE charge_sheet_id=?",
+        (gt["negative_control_lone_charge_sheet_id"],),
+    ).fetchone()
+    assert row, "the negative-control charge-sheet must have resolved to an accused entity"
+    lone_entity_id = row["entity_id"]
+
+    hits = detect_syndicate_charge_sheet_threshold(conn)
+    for h in hits:
+        assert lone_entity_id not in h["syndicate_members"]
