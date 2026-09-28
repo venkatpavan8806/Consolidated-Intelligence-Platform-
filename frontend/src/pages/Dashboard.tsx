@@ -88,7 +88,6 @@ export default function Dashboard() {
     { to: 'graph', label: 'Graph', count: graph.nodes.length },
     { to: 'leads', label: 'Leads', count: leads.length },
     { to: 'review-queue', label: 'Review Queue', count: reviewQueue.length },
-    { to: 'women-safety', label: 'Women Safety', count: womenSafety.leads.length, flagship: true },
     { to: 'evaluation', label: 'Self-Evaluation' },
     { to: 'audit', label: 'Audit Chain' },
   ];
@@ -120,7 +119,7 @@ export default function Dashboard() {
                 data-tour-nav={item.to}
                 className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
               >
-                <span>{item.label}{item.flagship ? ' ★' : ''}</span>
+                <span>{item.label}</span>
                 {item.count !== undefined && <span className="count mono">{item.count}</span>}
               </NavLink>
             ))}
