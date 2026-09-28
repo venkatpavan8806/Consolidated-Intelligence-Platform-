@@ -6,6 +6,7 @@ from app.db.schema import get_connection
 from app.auth.rbac import authenticate, create_token, get_current_user, require_case_access, require_admin
 from app.api.schemas import (
     LoginRequest, DispositionRequest, ReviewResolutionRequest, TamperDemoRequest, RestoreDemoRequest,
+    CaseTypeConfirmRequest,
 )
 from app.audit import chain as audit_chain
 from app.graph.case_view import build_case_graph, get_case_entity_ids
@@ -14,6 +15,8 @@ from app.evidence.engine import build_leads, build_women_safety_leads, build_all
 from app.evidence.lookup import get_entity_detail
 from app.evaluation.self_eval import run_self_evaluation
 from app.pipeline import run_full_pipeline
+from app.config import CASE_TYPES
+from app.classification.case_type_classifier import classify_case, suggest_case_types_for_case
 
 router = APIRouter()
 
@@ -79,6 +82,69 @@ def case_leads(case_id: str, reason: str = Query(..., min_length=3), user: dict 
                               extra={"lead_count": len(relevant)})
     conn.close()
     return relevant
+
+
+@router.get("/cases/{case_id}/case-types")
+def case_types(case_id: str, user: dict = Depends(get_current_user)):
+    """Current case-type rows for a case (SUGGESTED/CONFIRMED/REJECTED) --
+    the read side of the classifier's suggest -> investigator confirms
+    flow. Does not run the classifier; call POST .../classify for that."""
+    require_case_access(case_id, user)
+    conn = _conn()
+    rows = [dict(r) for r in conn.execute(
+        "SELECT * FROM case_case_types WHERE case_id=? ORDER BY confidence DESC NULLS LAST, case_type",
+        (case_id,),
+    ).fetchall()]
+    conn.close()
+    return rows
+
+
+@router.post("/cases/{case_id}/classify")
+def classify(case_id: str, user: dict = Depends(get_current_user)):
+    """Runs the case-type classifier and writes/refreshes SUGGESTED rows in
+    case_case_types. Never auto-confirms -- an investigator must still hit
+    the confirm endpoint before any case-type-scoped module treats the case
+    as that type (HANDOFF.md Section 4: human-confirm is a hard
+    requirement, not optional)."""
+    require_case_access(case_id, user)
+    conn = _conn()
+    suggestions = suggest_case_types_for_case(conn, case_id)
+    audit_chain.append_entry(conn, user["username"], "CLASSIFY_CASE_TYPE", case_id=case_id,
+                              reason="case-type classifier run",
+                              extra={"suggested_case_types": [s["case_type"] for s in suggestions]})
+    conn.close()
+    return suggestions
+
+
+@router.post("/cases/{case_id}/case-types/{case_type}/confirm")
+def confirm_case_type(case_id: str, case_type: str, body: CaseTypeConfirmRequest, user: dict = Depends(get_current_user)):
+    """The human-decision step the classifier's suggestions feed into.
+    Only a CONFIRMED case type is meant to activate that case type's
+    modules -- a SUGGESTED row on its own must never be treated as
+    confirmed anywhere else in the system."""
+    if case_type not in CASE_TYPES:
+        raise HTTPException(status_code=400, detail=f"unknown case_type, must be one of {CASE_TYPES}")
+    if body.decision not in ("CONFIRMED", "REJECTED"):
+        raise HTTPException(status_code=400, detail="decision must be CONFIRMED or REJECTED")
+    require_case_access(case_id, user)
+    conn = _conn()
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    conn.execute(
+        """INSERT INTO case_case_types (case_id, case_type, status, confirmed_by, confirmed_at, reason)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(case_id, case_type) DO UPDATE SET
+               status=excluded.status, confirmed_by=excluded.confirmed_by,
+               confirmed_at=excluded.confirmed_at,
+               reason=COALESCE(?, case_case_types.reason)""",
+        (case_id, case_type, body.decision, user["username"], ts, body.notes, body.notes),
+    )
+    conn.commit()
+    audit_chain.append_entry(conn, user["username"], "CONFIRM_CASE_TYPE", case_id=case_id,
+                              reason=body.notes or f"{body.decision} case type {case_type}",
+                              extra={"case_type": case_type, "decision": body.decision})
+    conn.close()
+    return {"case_id": case_id, "case_type": case_type, "status": body.decision, "timestamp": ts}
 
 
 @router.post("/leads/{lead_id}/disposition")

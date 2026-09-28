@@ -138,6 +138,7 @@ def check_detector_hits(conn):
     from app.graph.analytics import compute_communities
     from app.detectors.women_safety import detect_transporter_candidates
     from app.detectors.narcotics_physical import detect_ndps_compliance_flags
+    from app.classification.case_type_classifier import classify_case
 
     gt = _load_ground_truth()
     checks = []
@@ -174,6 +175,15 @@ def check_detector_hits(conn):
     ndps_ok = expected_flags.issubset(found_flags)
     checks.append({"check": "ndps_all_planted_violations_flagged", "passed": ndps_ok,
                    "detail": {"expected": sorted(expected_flags), "found": sorted(found_flags)}})
+
+    expected_top_case_type = {"C001": "FINANCIAL_FRAUD", "C002": "TRAFFICKING_MISSING_PERSON", "C003": "NARCOTICS"}
+    for case_id, expected_type in expected_top_case_type.items():
+        suggestions = classify_case(conn, case_id)
+        top_type = suggestions[0]["case_type"] if suggestions else None
+        checks.append({"check": f"case_type_classifier_top_suggestion_{case_id}",
+                       "passed": top_type == expected_type,
+                       "detail": {"expected": expected_type, "got": top_type,
+                                  "all_suggestions": [(s["case_type"], s["confidence"]) for s in suggestions]}})
 
     return checks
 

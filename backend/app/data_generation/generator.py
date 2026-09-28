@@ -158,6 +158,9 @@ def add_ndps_sampling(property_id, **kwargs):
 # ---------------------------------------------------------------------------
 CASE_FRAUD = "C001"
 
+add_case_type(CASE_FRAUD, "FINANCIAL_FRAUD", status="CONFIRMED",
+              reason="seed data: legacy category 'financial_fraud' migrated on schema cutover")
+
 # --- Planted case: two people, same name, must NOT merge ---
 RK1_PHONE, RK1_ACC = "9810000001", "100000000001"
 RK2_PHONE, RK2_ACC = "9810000002", "100000000002"
@@ -284,6 +287,10 @@ ground_truth["cases"][CASE_FRAUD] = {
 # CASE 2: Missing Persons - Sonepur Corridor (Women Safety flagship)
 # ---------------------------------------------------------------------------
 CASE_TRAFFICKING = "C002"
+
+add_case_type(CASE_TRAFFICKING, "TRAFFICKING_MISSING_PERSON", status="CONFIRMED",
+              reason="seed data: legacy category 'women_safety' migrated on schema cutover "
+                     "(HANDOFF.md Section 4: Women Safety is repositioned as this case type, not deleted)")
 
 RECRUITER = "9820000001"
 TRANSPORTER = "9820000002"

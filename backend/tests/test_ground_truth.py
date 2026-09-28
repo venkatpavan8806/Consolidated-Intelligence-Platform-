@@ -13,6 +13,9 @@ from app.detectors.mule_layering import detect_mule_layering
 from app.detectors.temporal_motif import detect_call_before_transfer
 from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
 from app.detectors.narcotics_physical import detect_ndps_compliance_flags
+from app.classification.case_type_classifier import (
+    classify_case, suggest_case_types_for_case, score_keyword_signals,
+)
 from app.audit import chain as audit_chain
 from app.recovery.missing_link import evaluate_recall_at_k
 
@@ -181,6 +184,88 @@ def test_ndps_compliance_flags_all_planted_violations_detected(conn):
     expected_flags = set(gt["expected_violation_flags"])
     missing = expected_flags - found_flags
     assert not missing, f"expected NDPS compliance flags not raised: {missing}"
+
+
+def test_classifier_suggests_correct_case_type_for_each_seeded_case(conn):
+    # C001 is seeded/confirmed FINANCIAL_FRAUD -- the classifier must
+    # independently find it as the top-confidence suggestion from the
+    # detector evidence and FIR text alone, not just echo the seed.
+    top_c001 = classify_case(conn, "C001")
+    assert top_c001, "classifier must find at least one case type for C001"
+    assert top_c001[0]["case_type"] == "FINANCIAL_FRAUD"
+    assert top_c001[0]["confidence"] >= 0.5
+    assert any(s["kind"] == "STRUCTURAL" for s in top_c001[0]["signals"]), \
+        "the top suggestion for a case with real detector hits must cite structural evidence, not keywords alone"
+
+    top_c002 = classify_case(conn, "C002")
+    assert top_c002 and top_c002[0]["case_type"] == "TRAFFICKING_MISSING_PERSON"
+    assert top_c002[0]["confidence"] >= 0.5
+
+    top_c003 = classify_case(conn, "C003")
+    assert top_c003 and top_c003[0]["case_type"] == "NARCOTICS"
+    assert top_c003[0]["confidence"] >= 0.5
+
+
+def test_classifier_never_overrides_a_confirmed_case_type(conn):
+    # C001 is seeded CONFIRMED for FINANCIAL_FRAUD. Running the classifier
+    # (e.g. after new evidence lands) must never touch that row -- a human
+    # decision stands even if re-classification would produce a different
+    # confidence or reason for the same case type.
+    before = dict(conn.execute(
+        "SELECT * FROM case_case_types WHERE case_id='C001' AND case_type='FINANCIAL_FRAUD'"
+    ).fetchone())
+    assert before["status"] == "CONFIRMED"
+
+    suggest_case_types_for_case(conn, "C001")
+
+    after = dict(conn.execute(
+        "SELECT * FROM case_case_types WHERE case_id='C001' AND case_type='FINANCIAL_FRAUD'"
+    ).fetchone())
+    assert after == before, "a CONFIRMED case-type row must be byte-for-byte untouched by a classifier re-run"
+
+
+def test_classifier_suggestion_write_path_only_writes_suggested_rows(conn):
+    conn.execute("DELETE FROM case_case_types WHERE case_id='C002'")
+    conn.commit()
+
+    suggestions = suggest_case_types_for_case(conn, "C002")
+    assert any(s["case_type"] == "TRAFFICKING_MISSING_PERSON" for s in suggestions)
+
+    rows = {r["case_type"]: r["status"] for r in
+            conn.execute("SELECT * FROM case_case_types WHERE case_id='C002'").fetchall()}
+    assert rows["TRAFFICKING_MISSING_PERSON"] == "SUGGESTED"
+    assert all(status == "SUGGESTED" for status in rows.values()), \
+        "the classifier's write path must never write CONFIRMED/REJECTED itself"
+
+
+def test_keyword_scanner_matches_planted_terms_and_ignores_unrelated_text():
+    # Direct unit test of the pure text->signal function, independent of
+    # any case or DB state -- covers the 3 case types that don't yet have
+    # a structured detector (Assault/Homicide, Robbery/Theft, Organized
+    # Crime), so the classifier isn't silent on them before their modules
+    # are built (see HANDOFF.md Section 6 checklist).
+    texts = [
+        ("FIR_TEST_1", "The victim was found with fatal injuries; a post-mortem was ordered and the case "
+                        "was registered as culpable homicide."),
+        ("FIR_TEST_2", "A robbery was reported at the jewellery shop; the accused fled after a chain "
+                        "snatching incident nearby."),
+        ("FIR_TEST_3", "Surveillance suggests the accused is linked to a wider syndicate operating an "
+                        "extortion racket across the district -- organized crime angle to be probed."),
+        ("FIR_TEST_4", "The investigating officer filed a routine status report; no new developments."),
+    ]
+    hits = score_keyword_signals(texts)
+
+    assert "ASSAULT_HOMICIDE" in hits and {"post-mortem", "culpable homicide"}.issubset(hits["ASSAULT_HOMICIDE"])
+    assert "ROBBERY_THEFT" in hits and {"robbery", "chain snatching"}.issubset(hits["ROBBERY_THEFT"])
+    assert "ORGANIZED_CRIME" in hits and {"syndicate", "extortion"}.issubset(hits["ORGANIZED_CRIME"])
+
+    # The routine, unrelated status report must not trip any lexicon --
+    # zero false positives is as important as recall for a suggest-only
+    # classifier an investigator has to triage.
+    for case_type, kw_hits in hits.items():
+        for kw, source_ids in kw_hits.items():
+            assert "FIR_TEST_4" not in source_ids, \
+                f"unrelated text falsely matched {case_type} keyword '{kw}'"
 
 
 def test_masked_edge_recovery_runs_and_reports_recall(conn):

@@ -1,6 +1,7 @@
 import { useOutletContext } from 'react-router-dom';
 import type { DashboardData } from './Dashboard';
 import { Eyebrow, StatCard, SeverityBadge } from '../components/common';
+import CaseTypePanel from '../components/CaseTypePanel';
 
 export default function Overview() {
   const { graph, leads, reviewQueue } = useOutletContext<DashboardData>();
@@ -14,6 +15,8 @@ export default function Overview() {
     <div>
       <Eyebrow>Case Overview</Eyebrow>
       <h1 style={{ fontSize: 26, margin: '10px 0 20px' }}>Investigation Snapshot</h1>
+
+      <CaseTypePanel />
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
         <StatCard value={graph.nodes.length} label="entities in view" />
