@@ -196,6 +196,8 @@ CREATE TABLE IF NOT EXISTS property_item (
     exhibit_mark TEXT,  -- e.g. "F1", "EC1", "Exhibit A", "DNA 1496[A]/18"
     seal_description TEXT,
     seal_count INTEGER,
+    estimated_value REAL,  -- INR; used by the Robbery/Theft stolen<->recovered
+                            -- property-match signal's +/-20% value-tolerance rule
     FOREIGN KEY(property_id) REFERENCES case_property(property_id)
 );
 
@@ -265,6 +267,31 @@ CREATE TABLE IF NOT EXISTS common_identifier_index (
     police_station TEXT,
     date TEXT,
     FOREIGN KEY(case_id) REFERENCES cases(case_id)
+);
+
+-- Robbery/Theft Digital-evidence structured MO record, modeled on the real
+-- NCRB IIF-II Crime Details Form (Item 4 "Type of crime") plus the IIF-III
+-- offender-profile flags -- the national schema DE-Claude's research pass
+-- found already exists for exactly this purpose, replacing any need for a
+-- free-text-only MO comparison. One row per FIR; the MO-series detector
+-- (app/detectors/robbery_theft_digital.py) compares rows pairwise.
+CREATE TABLE IF NOT EXISTS crime_mo_record (
+    record_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    fir_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    method_1 TEXT,           -- IIF-II "Method(s)" 1
+    conveyance TEXT,         -- IIF-II "Conveyance(s) used"
+    character_assumed TEXT,  -- IIF-II "Character assumed"
+    place_type TEXT,         -- IIF-II "Type of place of occurrence"
+    property_type TEXT,      -- IIF-II "Type of property stolen"
+    time_of_day_band TEXT,   -- e.g. LATE_NIGHT | MORNING | AFTERNOON | EVENING
+    language_dialect TEXT,   -- IIF-II "Language/Dialect used"
+    operates_with_accomplices INTEGER,  -- IIF-III flag
+    is_recidivist INTEGER,               -- IIF-III flag
+    is_generally_armed INTEGER,          -- IIF-III flag
+    FOREIGN KEY(case_id) REFERENCES cases(case_id),
+    FOREIGN KEY(fir_id) REFERENCES fir_records(fir_id)
 );
 """
 

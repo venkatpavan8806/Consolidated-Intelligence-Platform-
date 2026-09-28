@@ -55,6 +55,12 @@ export const api = {
   entityDetail: (entityId: string) => request<any>(`/entities/${entityId}`),
   analyticsSummary: (reason: string) => request<AnalyticsSummary>(`/analytics/summary?reason=${encodeURIComponent(reason)}`),
   womenSafety: (reason: string) => request<WomenSafetyData>(`/women-safety?reason=${encodeURIComponent(reason)}`),
+  caseTypes: (caseId: string) => request<CaseTypeRow[]>(`/cases/${caseId}/case-types`),
+  classifyCase: (caseId: string) => request<CaseTypeSuggestion[]>(`/cases/${caseId}/classify`, { method: 'POST' }),
+  confirmCaseType: (caseId: string, caseType: string, decision: 'CONFIRMED' | 'REJECTED', notes?: string) =>
+    request<CaseTypeRow>(`/cases/${caseId}/case-types/${caseType}/confirm`, {
+      method: 'POST', body: JSON.stringify({ decision, notes }),
+    }),
   evaluation: () => request<any>('/evaluation'),
   auditChain: () => request<{ entries: AuditEntry[]; verification: { valid: boolean; entry_count: number; broken_at_seq: number[] } }>('/audit/chain'),
   tamperDemo: (seq: number, new_reason: string) =>
@@ -130,6 +136,28 @@ export interface WomenSafetyData {
   transporters: { entity_id: string; label: string; entity_type: string; methods: string[]; detail: any }[];
   repeat_locations: { entity_id: string; location: string; source_records: string[]; independent_source_count: number; linked_entities: string[] }[];
   chain_candidates: { recruiter: any; transporter: any; receiver_side: any }[];
+}
+
+// Axis B: case-type classification. A case can carry multiple case types at
+// once (a case tagged both Financial and Assault runs both branches'
+// modules) -- so these are always arrays, never a single value.
+export type CaseTypeStatus = 'SUGGESTED' | 'CONFIRMED' | 'REJECTED';
+
+export interface CaseTypeRow {
+  case_id: string;
+  case_type: string;
+  status: CaseTypeStatus;
+  confidence: number | null;
+  reason: string | null;
+  confirmed_by: string | null;
+  confirmed_at: string | null;
+}
+
+export interface CaseTypeSuggestion {
+  case_type: string;
+  confidence: number;
+  reason: string;
+  signals: { kind: 'STRUCTURAL' | 'KEYWORD'; [key: string]: any }[];
 }
 
 export interface AuditEntry {

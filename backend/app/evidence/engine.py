@@ -17,6 +17,10 @@ from app.detectors.mule_layering import detect_mule_layering
 from app.detectors.temporal_motif import detect_call_before_transfer
 from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
 from app.detectors.narcotics_physical import detect_ndps_compliance_flags
+from app.detectors.robbery_theft_physical import (
+    detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
+)
+from app.detectors.robbery_theft_digital import detect_mo_series
 
 
 def _lead_id(lead_type: str, key: str) -> str:
@@ -210,6 +214,117 @@ def build_women_safety_leads(conn):
     return leads
 
 
+def build_robbery_theft_physical_leads(conn):
+    """Physical-evidence leads for Robbery/Theft: Vahan Samanvay-style
+    stolen<->recovered vehicle links, non-vehicle property matches, and
+    lingering-property (BNSS 497/503) flags. A vehicle/property match
+    genuinely spans two case files (the stolen report's case and the
+    recovery memo's case, often different) -- carried in case_ids (plural)
+    since a single case_id can't represent that; case_id is set to the
+    stolen-side case for any code that only reads the singular field."""
+    leads = []
+    severity_rank = {"HIGH": 2, "MEDIUM": 1, "LOW": 0}
+
+    for hit in detect_vehicle_links(conn):
+        severity = "HIGH" if hit["tampering_suspected"] else "MEDIUM"
+        fields = ", ".join(hit["matched_fields"])
+        tamper_note = (
+            " Chassis/registration/engine fields disagree in a way consistent with a re-identified "
+            "('re-birthed') vehicle, not a simple clerical mismatch."
+            if hit["tampering_suspected"] else ""
+        )
+        leads.append({
+            "lead_id": _lead_id("ROBBERY_VEHICLE_LINK", f"{hit['stolen_item_id']}_{hit['recovered_item_id']}"),
+            "lead_type": "ROBBERY_VEHICLE_LINK",
+            "severity": severity,
+            "case_id": hit["stolen_case_id"],
+            "case_ids": sorted({hit["stolen_case_id"], hit["recovered_case_id"]}),
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"{hit['vehicle_type']} reported stolen (item {hit['stolen_item_id']}) matches a "
+                       f"recovered vehicle (item {hit['recovered_item_id']}) on {fields} -- the same "
+                       f"vehicle-type-plus-two-identifiers rule NCRB's Vahan Samanvay system uses, "
+                       f"partial-number matches included.{tamper_note}",
+            "signals": [{"signal": "matched_fields", "value": hit["matched_fields"]},
+                        {"signal": "tampering_suspected", "value": hit["tampering_suspected"]}],
+            "source_record_ids": [hit["stolen_item_id"], hit["recovered_item_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_property_item_matches(conn):
+        is_link = hit["match_type"] == "LINK"
+        leads.append({
+            "lead_id": _lead_id("ROBBERY_PROPERTY_MATCH", f"{hit['stolen_item_id']}_{hit['recovered_item_id']}"),
+            "lead_type": "ROBBERY_PROPERTY_MATCH",
+            "severity": "HIGH" if is_link else "MEDIUM",
+            "case_id": hit["stolen_case_id"],
+            "case_ids": sorted({hit["stolen_case_id"], hit["recovered_case_id"]}),
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": (
+                f"Item '{hit['description']}' reported stolen (identifier {hit['identifier']}) exactly "
+                f"matches a recovered item's identifier -- a direct property link."
+                if is_link else
+                f"Item '{hit['description']}' reported stolen (value {hit['stolen_value']:,.0f}) matches "
+                f"a recovered item by description, with recovered value {hit['recovered_value']:,.0f} "
+                f"within the tolerance band -- a candidate match, weaker than an exact identifier link."
+            ),
+            "signals": [{"signal": "match_basis", "value": hit["match_basis"]}],
+            "source_record_ids": [hit["stolen_item_id"], hit["recovered_item_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_lingering_property(conn):
+        leads.append({
+            "lead_id": _lead_id("ROBBERY_LINGERING_PROPERTY", hit["property_id"]),
+            "lead_type": "ROBBERY_LINGERING_PROPERTY",
+            "severity": "MEDIUM",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Recovered property {hit['property_id']} has sat {hit['days_elapsed']} days since "
+                       f"seizure with no court-disposal record -- a BNSS 497/503 (interim custody/"
+                       f"disposal of case property) lapse worth checking against the case file.",
+            "signals": [{"signal": "days_elapsed", "value": hit["days_elapsed"]}],
+            "source_record_ids": [hit["property_id"]],
+            "created_at": _now(),
+        })
+
+    return leads
+
+
+def build_robbery_theft_digital_leads(conn):
+    """Digital-evidence leads for Robbery/Theft: NCRB IIF-II MO-series
+    detection, escalated to a BNS s.112 candidate once enough accused are
+    shared across the matched FIRs."""
+    leads = []
+    for hit in detect_mo_series(conn):
+        lead_type = "ROBBERY_MO_SERIES_S112_CANDIDATE" if hit["bns_112_candidate"] else "ROBBERY_MO_SERIES"
+        s112_note = (
+            f" {len(hit['shared_accused'])} accused are shared across both FIRs, clearing the BNS s.112 "
+            f"(petty organised crime) bar -- no charge-sheet-count history required for this section."
+            if hit["bns_112_candidate"] else ""
+        )
+        leads.append({
+            "lead_id": _lead_id(lead_type, f"{hit['fir_a']}_{hit['fir_b']}"),
+            "lead_type": lead_type,
+            "severity": "HIGH" if hit["bns_112_candidate"] else "MEDIUM",
+            "case_id": hit["case_a"],
+            "case_ids": sorted({hit["case_a"], hit["case_b"]}),
+            "entities_involved": list(hit["shared_accused"]),
+            "requires_human_verification": True,
+            "summary": f"FIRs {hit['fir_a']} and {hit['fir_b']}, {hit['days_apart']} days apart, match on "
+                       f"{len(hit['matched_fields'])} of the 6 NCRB IIF-II modus-operandi fields "
+                       f"({', '.join(hit['matched_fields'])}) -- a candidate crime series.{s112_note}",
+            "signals": [{"signal": "matched_fields", "value": hit["matched_fields"]},
+                        {"signal": "days_apart", "value": hit["days_apart"]},
+                        {"signal": "shared_accused_count", "value": len(hit["shared_accused"])}],
+            "source_record_ids": [hit["fir_a"], hit["fir_b"]],
+            "created_at": _now(),
+        })
+    return leads
+
+
 def build_narcotics_physical_leads(conn):
     """Physical-evidence leads for the Narcotics case type: NDPS s.52A /
     Test-Memo chain-of-custody compliance flags (see
@@ -244,7 +359,10 @@ def build_narcotics_physical_leads(conn):
 
 
 def build_all_leads(conn):
-    return build_leads(conn) + build_women_safety_leads(conn) + build_narcotics_physical_leads(conn)
+    return (
+        build_leads(conn) + build_women_safety_leads(conn) + build_narcotics_physical_leads(conn)
+        + build_robbery_theft_physical_leads(conn) + build_robbery_theft_digital_leads(conn)
+    )
 
 
 if __name__ == "__main__":

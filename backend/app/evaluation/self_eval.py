@@ -118,6 +118,8 @@ def data_source_coverage(conn):
     sources.append({"source": "Physical-evidence property/seizure records", "record_count": property_count})
     ndps_count = conn.execute("SELECT COUNT(*) AS n FROM ndps_sampling").fetchone()["n"]
     sources.append({"source": "NDPS Test Memo (Form-6) records", "record_count": ndps_count})
+    mo_count = conn.execute("SELECT COUNT(*) AS n FROM crime_mo_record").fetchone()["n"]
+    sources.append({"source": "NCRB IIF-II Crime Details Form (MO) records", "record_count": mo_count})
     return sources
 
 
@@ -138,6 +140,11 @@ def check_detector_hits(conn):
     from app.graph.analytics import compute_communities
     from app.detectors.women_safety import detect_transporter_candidates
     from app.detectors.narcotics_physical import detect_ndps_compliance_flags
+    from app.detectors.robbery_theft_physical import (
+        detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
+    )
+    from app.detectors.robbery_theft_digital import detect_mo_series
+    from app.classification.case_type_classifier import classify_case
 
     gt = _load_ground_truth()
     checks = []
@@ -174,6 +181,37 @@ def check_detector_hits(conn):
     ndps_ok = expected_flags.issubset(found_flags)
     checks.append({"check": "ndps_all_planted_violations_flagged", "passed": ndps_ok,
                    "detail": {"expected": sorted(expected_flags), "found": sorted(found_flags)}})
+
+    gt_robbery = gt["cases"]["C004"]
+    vehicle_hits = {(h["stolen_item_id"], h["recovered_item_id"]): h for h in detect_vehicle_links(conn)}
+    tamper_hit = vehicle_hits.get((gt_robbery["vehicle_tamper_stolen_item"], gt_robbery["vehicle_tamper_recovered_item"]))
+    checks.append({"check": "robbery_vehicle_tampering_detected",
+                   "passed": bool(tamper_hit and tamper_hit["tampering_suspected"])})
+
+    property_hits = {(h["stolen_item_id"], h["recovered_item_id"]): h for h in detect_property_item_matches(conn)}
+    link_hit = property_hits.get((gt_robbery["laptop_stolen_item"], gt_robbery["laptop_recovered_item"]))
+    checks.append({"check": "robbery_property_exact_identifier_link_detected",
+                   "passed": bool(link_hit and link_hit["match_type"] == "LINK")})
+
+    lingering_hits = {h["property_id"] for h in detect_lingering_property(conn)}
+    checks.append({"check": "robbery_lingering_property_flagged_compliant_silent",
+                   "passed": gt_robbery["lingering_property_id"] in lingering_hits
+                             and gt_robbery["compliant_property_id"] not in lingering_hits})
+
+    mo_hits = detect_mo_series(conn)
+    expected_pair = set(gt_robbery["mo_series_firs"])
+    s112_ok = any(set((h["fir_a"], h["fir_b"])) == expected_pair and h["bns_112_candidate"] for h in mo_hits)
+    checks.append({"check": "robbery_mo_series_s112_candidate_detected", "passed": s112_ok})
+
+    expected_top_case_type = {"C001": "FINANCIAL_FRAUD", "C002": "TRAFFICKING_MISSING_PERSON", "C003": "NARCOTICS",
+                               "C004": "ROBBERY_THEFT", "C005": "ROBBERY_THEFT"}
+    for case_id, expected_type in expected_top_case_type.items():
+        suggestions = classify_case(conn, case_id)
+        top_type = suggestions[0]["case_type"] if suggestions else None
+        checks.append({"check": f"case_type_classifier_top_suggestion_{case_id}",
+                       "passed": top_type == expected_type,
+                       "detail": {"expected": expected_type, "got": top_type,
+                                  "all_suggestions": [(s["case_type"], s["confidence"]) for s in suggestions]}})
 
     return checks
 

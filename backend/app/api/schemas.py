@@ -26,3 +26,8 @@ class RestoreDemoRequest(BaseModel):
     seq: int
     original_reason: str
     original_payload_raw: str
+
+
+class CaseTypeConfirmRequest(BaseModel):
+    decision: str  # CONFIRMED | REJECTED
+    notes: Optional[str] = None

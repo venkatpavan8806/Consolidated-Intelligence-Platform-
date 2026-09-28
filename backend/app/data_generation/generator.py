@@ -96,12 +96,14 @@ PROPERTY_SEQ = IdSeq("PROP")
 ITEM_SEQ = IdSeq("ITEM")
 EVENT_SEQ = IdSeq("EVT")
 MEMO_SEQ = IdSeq("MEMO")
+MO_SEQ = IdSeq("MO")
 
 case_case_type_rows = []
 case_property_rows = []
 property_item_rows = []
 custody_event_rows = []
 ndps_sampling_rows = []
+crime_mo_record_rows = []
 
 
 def add_case_type(case_id, case_type, status="CONFIRMED", confidence=None, reason=None):
@@ -118,11 +120,12 @@ def add_case_property(case_id, case_type, form_type, day, place, officer, witnes
 
 
 def add_property_item(property_id, description, quantity, unit, gross_weight, net_weight,
-                       identifiers=None, exhibit_mark=None, seal_description=None, seal_count=None):
+                       identifiers=None, exhibit_mark=None, seal_description=None, seal_count=None,
+                       estimated_value=None):
     iid = ITEM_SEQ.next()
     property_item_rows.append((
         iid, property_id, description, quantity, unit, gross_weight, net_weight,
-        json.dumps(identifiers or {}), exhibit_mark, seal_description, seal_count,
+        json.dumps(identifiers or {}), exhibit_mark, seal_description, seal_count, estimated_value,
     ))
     return iid
 
@@ -153,10 +156,26 @@ def add_ndps_sampling(property_id, **kwargs):
     return mid
 
 
+def add_crime_mo_record(case_id, fir_id, day, **kwargs):
+    rid = MO_SEQ.next()
+    crime_mo_record_rows.append((
+        rid, case_id, fir_id, dt(days=day),
+        kwargs.get("method_1"), kwargs.get("conveyance"), kwargs.get("character_assumed"),
+        kwargs.get("place_type"), kwargs.get("property_type"), kwargs.get("time_of_day_band"),
+        kwargs.get("language_dialect"),
+        int(kwargs.get("operates_with_accomplices", False)), int(kwargs.get("is_recidivist", False)),
+        int(kwargs.get("is_generally_armed", False)),
+    ))
+    return rid
+
+
 # ---------------------------------------------------------------------------
 # CASE 1: Fraud Ring Alpha
 # ---------------------------------------------------------------------------
 CASE_FRAUD = "C001"
+
+add_case_type(CASE_FRAUD, "FINANCIAL_FRAUD", status="CONFIRMED",
+              reason="seed data: legacy category 'financial_fraud' migrated on schema cutover")
 
 # --- Planted case: two people, same name, must NOT merge ---
 RK1_PHONE, RK1_ACC = "9810000001", "100000000001"
@@ -284,6 +303,10 @@ ground_truth["cases"][CASE_FRAUD] = {
 # CASE 2: Missing Persons - Sonepur Corridor (Women Safety flagship)
 # ---------------------------------------------------------------------------
 CASE_TRAFFICKING = "C002"
+
+add_case_type(CASE_TRAFFICKING, "TRAFFICKING_MISSING_PERSON", status="CONFIRMED",
+              reason="seed data: legacy category 'women_safety' migrated on schema cutover "
+                     "(HANDOFF.md Section 4: Women Safety is repositioned as this case type, not deleted)")
 
 RECRUITER = "9820000001"
 TRANSPORTER = "9820000002"
@@ -444,6 +467,138 @@ ground_truth["cases"][CASE_NARCOTICS] = {
 }
 
 # ---------------------------------------------------------------------------
+# CASE 4/5: Robbery/Theft - Ring Bazaar Vehicle Theft Ring (+ a separate
+# recovery/raid case, deliberately, so the vehicle/property-match signals
+# demonstrate genuine CROSS-case linking, not just cross-item matching
+# within one case file)
+# ---------------------------------------------------------------------------
+CASE_ROBBERY = "C004"
+CASE_ROBBERY_RECOVERY = "C005"
+
+add_case_type(CASE_ROBBERY, "ROBBERY_THEFT", status="CONFIRMED", reason="seed data: vehicle/property theft ring")
+add_case_type(CASE_ROBBERY_RECOVERY, "ROBBERY_THEFT", status="CONFIRMED", reason="seed data: recovered-property raid, linked to C004")
+
+add_fir(CASE_ROBBERY, "Ring Bazaar Police Station", 200,
+        "Complainant reported theft of a Honda Activa motorcycle (registration KA05AB1234, chassis "
+        "MB8ES1234K123456, engine ES1234K7890), a Dell Inspiron laptop (serial SN-LAP-778812), a gold "
+        "chain, and a television from the residence overnight.")
+add_fir(CASE_ROBBERY, "Ring Bazaar Police Station", 201,
+        "Complainant reported theft of a TVS Jupiter scooter (registration TN01ZZ9999, chassis "
+        "MD6JA1234L000111, engine JA1234L555) from a parking area.")
+
+# --- Stolen-property report (IIF-I-style), case C004 ---
+STOLEN_PROP = add_case_property(CASE_ROBBERY, "ROBBERY_THEFT", "STOLEN_PROPERTY_REPORT", day=200,
+                                 place="Ring Bazaar residential complex",
+                                 officer={"name": "SI Manoj Tiwari", "badge": "SI-4471"},
+                                 witnesses=["Complainant"])
+ITEM_VEHICLE_CLEAN = add_property_item(
+    STOLEN_PROP, "Motorcycle - Honda Activa", 1, "unit", None, None,
+    identifiers={"vehicle_type": "Motorcycle", "registration": "KA05AB1234",
+                 "chassis": "MB8ES1234K123456", "engine": "ES1234K7890"},
+)
+ITEM_VEHICLE_TAMPER = add_property_item(
+    STOLEN_PROP, "Scooter - TVS Jupiter", 1, "unit", None, None,
+    identifiers={"vehicle_type": "Scooter", "registration": "TN01ZZ9999",
+                 "chassis": "MD6JA1234L000111", "engine": "JA1234L555"},
+)
+ITEM_LAPTOP_STOLEN = add_property_item(
+    STOLEN_PROP, "Laptop - Dell Inspiron", 1, "unit", None, None,
+    identifiers={"serial": "SN-LAP-778812"}, estimated_value=45000,
+)
+ITEM_CHAIN_STOLEN = add_property_item(
+    STOLEN_PROP, "Gold chain", 1, "unit", None, None, estimated_value=60000,
+)
+ITEM_TV_NOISE = add_property_item(
+    STOLEN_PROP, "Television", 1, "unit", None, None, estimated_value=20000,
+)
+
+# --- Recovery memo (IIF-IV-style), case C005 -- a DIFFERENT case, so any
+# match found below is a genuine cross-case link, not a same-case echo ---
+RECOVERY_PROP_LINGERING = add_case_property(CASE_ROBBERY_RECOVERY, "ROBBERY_THEFT", "RECOVERY_MEMO", day=215,
+                                             place="Ring Bazaar raid site",
+                                             officer={"name": "SI Manoj Tiwari", "badge": "SI-4471"},
+                                             witnesses=["Panch witness 1", "Panch witness 2"])
+ITEM_VEHICLE_CLEAN_RECOVERED = add_property_item(
+    RECOVERY_PROP_LINGERING, "Motorcycle recovered", 1, "unit", None, None,
+    identifiers={"vehicle_type": "Motorcycle", "registration": "KA09AB1234",  # partial match: last 4 "1234"
+                 "chassis": "MB8ES1234K123456", "engine": "ES1234K7890"},
+)
+ITEM_VEHICLE_TAMPER_RECOVERED = add_property_item(
+    RECOVERY_PROP_LINGERING, "Scooter recovered - suspected re-birthed", 1, "unit", None, None,
+    identifiers={"vehicle_type": "Scooter", "registration": "TN02XX0000",
+                 "chassis": "MD6JA1234L000111",  # chassis matches...
+                 "engine": "JA9999L777"},         # ...but engine does not -- tampering signature
+)
+ITEM_LAPTOP_RECOVERED = add_property_item(
+    RECOVERY_PROP_LINGERING, "Laptop - Dell Inspiron", 1, "unit", None, None,
+    identifiers={"serial": "SN-LAP-778812"}, estimated_value=44000,  # exact serial -> LINK regardless of value
+)
+ITEM_CHAIN_RECOVERED = add_property_item(
+    RECOVERY_PROP_LINGERING, "Gold chain", 1, "unit", None, None, estimated_value=55000,  # within 20% of 60000 -> CANDIDATE
+)
+ITEM_BICYCLE_NOISE = add_property_item(
+    RECOVERY_PROP_LINGERING, "Bicycle", 1, "unit", None, None, estimated_value=3000,
+)
+# Deliberately no COURT_DISPOSAL event, and a later MOVEMENT event pushes
+# "as of" well past ROBBERY_LINGERING_PROPERTY_MAX_DAYS (90) from seizure.
+add_custody_event(RECOVERY_PROP_LINGERING, "MALKHANA_DEPOSIT", day=215, register_no="MK-2201",
+                   to_location="Ring Bazaar Malkhana")
+add_custody_event(RECOVERY_PROP_LINGERING, "MOVEMENT", day=330, from_location="Ring Bazaar Malkhana",
+                   to_location="District FSL", countersigned_by="SI Manoj Tiwari")
+
+# --- A second, compliant recovery property: disposed of well within the
+# lingering threshold, and holding only a non-matching item -- proves the
+# lingering-property and property-match detectors both stay silent here ---
+RECOVERY_PROP_CLEAN = add_case_property(CASE_ROBBERY_RECOVERY, "ROBBERY_THEFT", "RECOVERY_MEMO", day=216,
+                                         place="Ring Bazaar raid site",
+                                         officer={"name": "SI Manoj Tiwari", "badge": "SI-4471"},
+                                         witnesses=["Panch witness 1"])
+ITEM_WALLET_NOISE = add_property_item(RECOVERY_PROP_CLEAN, "Wallet", 1, "unit", None, None, estimated_value=2000)
+add_custody_event(RECOVERY_PROP_CLEAN, "COURT_DISPOSAL", day=240, report_no="DISP-889",
+                   conclusion_category="RELEASED_TO_OWNER")
+
+# --- MO-series scenario (Digital evidence, NCRB IIF-II fields) ---
+FIR_MO_1 = add_fir(CASE_ROBBERY, "Ring Bazaar Police Station", 220,
+                    "Accused Suresh Pawar (phone 9830000001) and Accused Iqbal Sheikh (phone 9830000002) "
+                    "snatched a gold chain from a pedestrian near the roadside market late in the "
+                    "evening, riding a motorcycle and posing as delivery agents.")
+FIR_MO_2 = add_fir(CASE_ROBBERY, "Ring Bazaar Police Station", 250,
+                    "Accused Suresh Pawar (phone 9830000001) and Accused Iqbal Sheikh (phone 9830000002) "
+                    "were identified snatching a gold chain from a woman near a roadside market stall in "
+                    "the afternoon, again riding a motorcycle and posing as delivery agents.")
+FIR_MO_3 = add_fir(CASE_ROBBERY, "Ring Bazaar Police Station", 400,
+                    "Accused Ramesh Yadav (phone 9830000009) broke into a locked shop at night and stole "
+                    "electronics using a crowbar, fleeing on foot -- unrelated modus operandi, for "
+                    "false-positive testing.")
+
+MO_FIR_1 = add_crime_mo_record(CASE_ROBBERY, FIR_MO_1, day=220, method_1="Chain Snatching",
+                                conveyance="Motorcycle", character_assumed="Delivery Agent",
+                                place_type="Roadside Market", property_type="Gold Chain",
+                                time_of_day_band="EVENING", language_dialect="Hindi",
+                                operates_with_accomplices=True)
+MO_FIR_2 = add_crime_mo_record(CASE_ROBBERY, FIR_MO_2, day=250, method_1="Chain Snatching",
+                                conveyance="Motorcycle", character_assumed="Delivery Agent",
+                                place_type="Roadside Market", property_type="Gold Chain",
+                                time_of_day_band="AFTERNOON", language_dialect="Hindi",
+                                operates_with_accomplices=True)
+MO_FIR_3 = add_crime_mo_record(CASE_ROBBERY, FIR_MO_3, day=400, method_1="House-breaking",
+                                conveyance="None", character_assumed="Unknown", place_type="Shop",
+                                property_type="Electronics", time_of_day_band="NIGHT", language_dialect="Hindi")
+
+ground_truth["cases"][CASE_ROBBERY] = {
+    "title": "Robbery/Theft - Ring Bazaar Vehicle Theft Ring",
+    "recovery_case_id": CASE_ROBBERY_RECOVERY,
+    "vehicle_clean_stolen_item": ITEM_VEHICLE_CLEAN, "vehicle_clean_recovered_item": ITEM_VEHICLE_CLEAN_RECOVERED,
+    "vehicle_tamper_stolen_item": ITEM_VEHICLE_TAMPER, "vehicle_tamper_recovered_item": ITEM_VEHICLE_TAMPER_RECOVERED,
+    "laptop_stolen_item": ITEM_LAPTOP_STOLEN, "laptop_recovered_item": ITEM_LAPTOP_RECOVERED,
+    "chain_stolen_item": ITEM_CHAIN_STOLEN, "chain_recovered_item": ITEM_CHAIN_RECOVERED,
+    "noise_stolen_items": [ITEM_TV_NOISE], "noise_recovered_items": [ITEM_BICYCLE_NOISE, ITEM_WALLET_NOISE],
+    "lingering_property_id": RECOVERY_PROP_LINGERING, "compliant_property_id": RECOVERY_PROP_CLEAN,
+    "mo_series_firs": [FIR_MO_1, FIR_MO_2], "mo_noise_fir": FIR_MO_3,
+    "mo_series_min_shared_accused": 2,
+}
+
+# ---------------------------------------------------------------------------
 # Background noise: unrelated random activity for realism / false-positive testing
 # ---------------------------------------------------------------------------
 NOISE_PHONES = [f"97000{str(i).zfill(5)}" for i in range(1, 25)]
@@ -471,6 +626,8 @@ def generate(reset: bool = True):
             (CASE_FRAUD, "Fraud Ring Alpha", "financial_fraud", dt(days=0)),
             (CASE_TRAFFICKING, "Missing Persons - Sonepur Corridor", "women_safety", dt(days=100)),
             (CASE_NARCOTICS, "Narcotics - Sonepur Storage Unit", "narcotics", dt(days=150)),
+            (CASE_ROBBERY, "Robbery/Theft - Ring Bazaar Vehicle Theft Ring", "robbery_theft", dt(days=200)),
+            (CASE_ROBBERY_RECOVERY, "Recovered Property - Ring Bazaar Raid", "robbery_theft", dt(days=215)),
         ],
     )
     cur.executemany(
@@ -486,8 +643,8 @@ def generate(reset: bool = True):
     )
     cur.executemany(
         "INSERT INTO property_item (item_id, property_id, description, quantity, unit, gross_weight, "
-        "net_weight, identifiers_json, exhibit_mark, seal_description, seal_count) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "net_weight, identifiers_json, exhibit_mark, seal_description, seal_count, estimated_value) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         property_item_rows,
     )
     cur.executemany(
@@ -507,6 +664,13 @@ def generate(reset: bool = True):
     cur.executemany(
         "INSERT INTO fir_records (fir_id, case_id, station, date, text) VALUES (?, ?, ?, ?, ?)",
         fir_rows,
+    )
+    cur.executemany(
+        "INSERT INTO crime_mo_record (record_id, case_id, fir_id, date, method_1, conveyance, "
+        "character_assumed, place_type, property_type, time_of_day_band, language_dialect, "
+        "operates_with_accomplices, is_recidivist, is_generally_armed) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        crime_mo_record_rows,
     )
     cur.executemany(
         "INSERT INTO intel_records (record_id, case_id, source_category, reporting_unit, date, text) "
