@@ -17,6 +17,12 @@ from app.detectors.robbery_theft_physical import (
     detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
 )
 from app.detectors.robbery_theft_digital import detect_mo_series
+from app.detectors.assault_homicide_physical import (
+    detect_inquest_witness_violations, detect_injury_list_mismatch, detect_postmortem_missing_timing_fields,
+    detect_custodial_death_intimation_violation, detect_mlc_classification_inconsistency,
+    detect_forensic_matches, detect_forensic_confidence_misuse,
+)
+from app.detectors.assault_homicide_digital import detect_uncertified_tower_evidence, detect_spatiotemporal_correlation
 from app.classification.case_type_classifier import (
     classify_case, suggest_case_types_for_case, score_keyword_signals,
 )
@@ -217,6 +223,14 @@ def test_classifier_suggests_correct_case_type_for_each_seeded_case(conn):
     assert top_c005 and top_c005[0]["case_type"] == "ROBBERY_THEFT"
     assert top_c005[0]["confidence"] >= 0.5
 
+    top_c006 = classify_case(conn, "C006")
+    assert top_c006 and top_c006[0]["case_type"] == "ASSAULT_HOMICIDE"
+    assert top_c006[0]["confidence"] >= 0.5
+
+    top_c008 = classify_case(conn, "C008")
+    assert top_c008 and top_c008[0]["case_type"] == "ASSAULT_HOMICIDE"
+    assert top_c008[0]["confidence"] >= 0.5
+
 
 def test_classifier_never_overrides_a_confirmed_case_type(conn):
     # C001 is seeded CONFIRMED for FINANCIAL_FRAUD. Running the classifier
@@ -340,6 +354,128 @@ def test_robbery_theft_mo_series_and_s112_candidate_detected(conn):
     noise_fir = gt["mo_noise_fir"]
     assert not any(noise_fir in (h["fir_a"], h["fir_b"]) for h in hits), \
         "an FIR with a materially different modus operandi must not be matched into the series"
+
+
+def test_inquest_witness_violation_detected_and_clean_case_silent(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = {h["inquest_id"]: h for h in detect_inquest_witness_violations(conn)}
+    assert gt["inquest_violation_id"] in hits, \
+        "an inquest with fewer than the BNSS s.194 minimum witnesses must be flagged"
+    assert hits[gt["inquest_violation_id"]]["required"] == gt["inquest_min_witnesses"]
+
+    gt_clean = _gt()["cases"]["C008"]
+    assert gt_clean["inquest_clean_id"] not in hits, \
+        "a compliant inquest with enough witnesses must not be flagged -- zero false positives"
+
+
+def test_injury_list_mismatch_detected_and_clean_case_silent(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = {h["pm_id"]: h for h in detect_injury_list_mismatch(conn)}
+    assert gt["pm_violation_id"] in hits, \
+        "an injury present in the inquest but missing from the post-mortem must be flagged"
+    assert gt["mismatched_injury"] in hits[gt["pm_violation_id"]]["missing_from_pm"]
+
+    gt_clean = _gt()["cases"]["C008"]
+    assert gt_clean["pm_clean_id"] not in hits, \
+        "identical injury lists on both records must produce zero mismatch flags"
+
+
+def test_postmortem_missing_timing_fields_detected_and_clean_case_silent(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = {h["pm_id"]: h for h in detect_postmortem_missing_timing_fields(conn)}
+    assert gt["pm_violation_id"] in hits
+    assert {"rectal_temperature", "rigor_mortis_timing"}.issubset(set(hits[gt["pm_violation_id"]]["missing_fields"]))
+
+    gt_clean = _gt()["cases"]["C008"]
+    assert gt_clean["pm_clean_id"] not in hits, \
+        "a post-mortem with both rectal_temperature and rigor_mortis timing recorded must not be flagged"
+
+
+def test_custodial_death_intimation_violation_detected(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = {h["inquest_id"]: h for h in detect_custodial_death_intimation_violation(conn)}
+    assert gt["inquest_violation_id"] in hits
+    hit = hits[gt["inquest_violation_id"]]
+    assert hit["violation"] == "INTIMATION_DELAYED"
+    assert hit["hours_elapsed"] == gt["custodial_intimation_hours"]
+
+    # C008's death is not custodial at all -- must never be considered here.
+    gt_clean = _gt()["cases"]["C008"]
+    assert gt_clean["inquest_clean_id"] not in hits
+
+
+def test_mlc_classification_inconsistency_both_directions_detected(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = {h["mlc_id"]: h for h in detect_mlc_classification_inconsistency(conn)}
+    assert gt["mlc_low_followup_id"] in hits and hits[gt["mlc_low_followup_id"]]["issue"] == "GRIEVOUS_WITH_LOW_FOLLOWUP"
+    assert gt["mlc_high_followup_id"] in hits and hits[gt["mlc_high_followup_id"]]["issue"] == "SIMPLE_WITH_HIGH_FOLLOWUP"
+
+    gt_clean = _gt()["cases"]["C008"]
+    assert gt_clean["mlc_clean_id"] not in hits, \
+        "a GRIEVOUS classification backed by a substantial follow-up period must not be flagged"
+
+
+def test_forensic_matches_respect_per_discipline_evidentiary_strength(conn):
+    gt = _gt()["cases"]["C006"]
+    gt_clean = _gt()["cases"]["C008"]
+    hits = detect_forensic_matches(conn)
+    by_id = {h["match_id"]: h for h in hits}
+
+    fp = by_id.get(gt["forensic_fingerprint_link_id"])
+    assert fp is not None and fp["finding_type"] == "LINK", \
+        "AFIS/NAFIS is a real networked database -- a matching NFN must be an automated LINK"
+    assert sorted((fp["case_id_a"], fp["case_id_b"])) == sorted((gt["coldcase_id"], "C006"))
+
+    ballistics = by_id.get(gt["forensic_ballistics_candidate_id"])
+    assert ballistics is not None and ballistics["finding_type"] == "CANDIDATE_EXAMINER_ASSERTED", \
+        "India has no verified networked ballistics database -- must never surface as an automated LINK"
+
+    dna_clean = by_id.get(gt_clean["forensic_dna_clean_link_id"])
+    assert dna_clean is not None and dna_clean["finding_type"] == "LINK", \
+        "a categorical DNA 'MATCHES' result must be treated as a LINK"
+
+    # The DNA record marked INCONCLUSIVE must never appear as a LINK/match
+    # here, however the case file itself annotated it -- that's exactly
+    # what test_forensic_confidence_misuse_detected checks separately.
+    assert gt["forensic_dna_misuse_id"] not in by_id
+
+
+def test_forensic_confidence_misuse_detected_and_clean_case_silent(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = {h["match_id"] for h in detect_forensic_confidence_misuse(conn)}
+    assert gt["forensic_dna_misuse_id"] in hits, \
+        "an INCONCLUSIVE DNA result treated as positive in the case file must be flagged"
+
+    gt_clean = _gt()["cases"]["C008"]
+    assert gt_clean["forensic_dna_clean_link_id"] not in hits, \
+        "a categorical MATCHES result is never mistaken for a misuse case"
+
+
+def test_uncertified_tower_evidence_detected_and_certified_case_silent(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = {h["record_id"] for h in detect_uncertified_tower_evidence(conn)}
+    assert gt["tower_uncertified_id"] in hits, \
+        "a tower record with no s.65B(4) certificate must be flagged"
+    assert gt["tower_certified_noise_id"] not in hits
+
+    gt_clean = _gt()["cases"]["C008"]
+    assert gt_clean["tower_clean_id"] not in hits, \
+        "a certified tower record must never be flagged as uncertified"
+
+
+def test_spatiotemporal_tower_correlation_detected(conn):
+    gt = _gt()["cases"]["C006"]
+    hits = detect_spatiotemporal_correlation(conn)
+    by_record = {h["record_id"]: h for h in hits}
+
+    hit = by_record.get(gt["tower_uncertified_id"])
+    assert hit is not None, \
+        "a tower ping near the death place and within the time window must correlate to the inquest"
+    assert hit["is_certified_65b"] is False
+
+    # The unrelated certified noise ping (different locality, different
+    # time) must never correlate to this inquest.
+    assert gt["tower_certified_noise_id"] not in by_record
 
 
 def test_masked_edge_recovery_runs_and_reports_recall(conn):

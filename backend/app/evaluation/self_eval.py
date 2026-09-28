@@ -120,6 +120,16 @@ def data_source_coverage(conn):
     sources.append({"source": "NDPS Test Memo (Form-6) records", "record_count": ndps_count})
     mo_count = conn.execute("SELECT COUNT(*) AS n FROM crime_mo_record").fetchone()["n"]
     sources.append({"source": "NCRB IIF-II Crime Details Form (MO) records", "record_count": mo_count})
+    inquest_count = conn.execute("SELECT COUNT(*) AS n FROM inquest_report").fetchone()["n"]
+    sources.append({"source": "Inquest reports (BNSS s.194)", "record_count": inquest_count})
+    pm_count = conn.execute("SELECT COUNT(*) AS n FROM post_mortem_report").fetchone()["n"]
+    sources.append({"source": "Post-mortem reports (NHRC Model Autopsy Form)", "record_count": pm_count})
+    mlc_count = conn.execute("SELECT COUNT(*) AS n FROM mlc_record").fetchone()["n"]
+    sources.append({"source": "Medico-Legal Case (MLC) records", "record_count": mlc_count})
+    forensic_count = conn.execute("SELECT COUNT(*) AS n FROM forensic_match").fetchone()["n"]
+    sources.append({"source": "Forensic match records (fingerprint/ballistics/DNA)", "record_count": forensic_count})
+    tower_count = conn.execute("SELECT COUNT(*) AS n FROM tower_location_record").fetchone()["n"]
+    sources.append({"source": "Tower/cell-site location records", "record_count": tower_count})
     return sources
 
 
@@ -144,6 +154,11 @@ def check_detector_hits(conn):
         detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
     )
     from app.detectors.robbery_theft_digital import detect_mo_series
+    from app.detectors.assault_homicide_physical import (
+        detect_inquest_witness_violations, detect_custodial_death_intimation_violation,
+        detect_forensic_matches, detect_forensic_confidence_misuse,
+    )
+    from app.detectors.assault_homicide_digital import detect_uncertified_tower_evidence, detect_spatiotemporal_correlation
     from app.classification.case_type_classifier import classify_case
 
     gt = _load_ground_truth()
@@ -203,8 +218,43 @@ def check_detector_hits(conn):
     s112_ok = any(set((h["fir_a"], h["fir_b"])) == expected_pair and h["bns_112_candidate"] for h in mo_hits)
     checks.append({"check": "robbery_mo_series_s112_candidate_detected", "passed": s112_ok})
 
+    gt_assault = gt["cases"]["C006"]
+    gt_assault_clean = gt["cases"]["C008"]
+
+    witness_hits = {h["inquest_id"] for h in detect_inquest_witness_violations(conn)}
+    checks.append({"check": "assault_inquest_witness_violation_detected_compliant_silent",
+                   "passed": gt_assault["inquest_violation_id"] in witness_hits
+                             and gt_assault_clean["inquest_clean_id"] not in witness_hits})
+
+    custodial_hits = {h["inquest_id"]: h for h in detect_custodial_death_intimation_violation(conn)}
+    checks.append({"check": "assault_custodial_intimation_delay_detected",
+                   "passed": custodial_hits.get(gt_assault["inquest_violation_id"], {}).get("violation")
+                             == "INTIMATION_DELAYED"})
+
+    forensic_hits = {h["match_id"]: h for h in detect_forensic_matches(conn)}
+    fp_link = forensic_hits.get(gt_assault["forensic_fingerprint_link_id"])
+    ballistics = forensic_hits.get(gt_assault["forensic_ballistics_candidate_id"])
+    checks.append({"check": "assault_fingerprint_afis_link_detected",
+                   "passed": bool(fp_link and fp_link["finding_type"] == "LINK")})
+    checks.append({"check": "assault_ballistics_never_surfaced_as_automated_link",
+                   "passed": bool(ballistics and ballistics["finding_type"] == "CANDIDATE_EXAMINER_ASSERTED")})
+
+    misuse_hits = {h["match_id"] for h in detect_forensic_confidence_misuse(conn)}
+    checks.append({"check": "assault_dna_inconclusive_treated_as_positive_flagged",
+                   "passed": gt_assault["forensic_dna_misuse_id"] in misuse_hits})
+
+    uncertified_hits = {h["record_id"] for h in detect_uncertified_tower_evidence(conn)}
+    checks.append({"check": "assault_uncertified_tower_evidence_flagged_certified_silent",
+                   "passed": gt_assault["tower_uncertified_id"] in uncertified_hits
+                             and gt_assault_clean["tower_clean_id"] not in uncertified_hits})
+
+    spatiotemporal_hits = {h["record_id"] for h in detect_spatiotemporal_correlation(conn)}
+    checks.append({"check": "assault_spatiotemporal_tower_correlation_detected",
+                   "passed": gt_assault["tower_uncertified_id"] in spatiotemporal_hits})
+
     expected_top_case_type = {"C001": "FINANCIAL_FRAUD", "C002": "TRAFFICKING_MISSING_PERSON", "C003": "NARCOTICS",
-                               "C004": "ROBBERY_THEFT", "C005": "ROBBERY_THEFT"}
+                               "C004": "ROBBERY_THEFT", "C005": "ROBBERY_THEFT",
+                               "C006": "ASSAULT_HOMICIDE", "C008": "ASSAULT_HOMICIDE"}
     for case_id, expected_type in expected_top_case_type.items():
         suggestions = classify_case(conn, case_id)
         top_type = suggestions[0]["case_type"] if suggestions else None

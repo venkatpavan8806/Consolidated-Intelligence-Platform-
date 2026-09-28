@@ -159,6 +159,17 @@ CLASSIFIER_LEAD_TYPE_TO_CASE_TYPE = {
     "ROBBERY_LINGERING_PROPERTY": "ROBBERY_THEFT",
     "ROBBERY_MO_SERIES": "ROBBERY_THEFT",
     "ROBBERY_MO_SERIES_S112_CANDIDATE": "ROBBERY_THEFT",
+    "INQUEST_WITNESS_VIOLATION": "ASSAULT_HOMICIDE",
+    "INQUEST_PM_INJURY_MISMATCH": "ASSAULT_HOMICIDE",
+    "POSTMORTEM_MISSING_TIMING_FIELDS": "ASSAULT_HOMICIDE",
+    "CUSTODIAL_DEATH_INTIMATION_VIOLATION": "ASSAULT_HOMICIDE",
+    "MLC_CLASSIFICATION_INCONSISTENCY": "ASSAULT_HOMICIDE",
+    "FORENSIC_FINGERPRINT_MATCH": "ASSAULT_HOMICIDE",
+    "FORENSIC_BALLISTICS_EXAMINER_ASSERTED": "ASSAULT_HOMICIDE",
+    "FORENSIC_DNA_MATCH": "ASSAULT_HOMICIDE",
+    "FORENSIC_CONFIDENCE_MISUSE": "ASSAULT_HOMICIDE",
+    "UNCERTIFIED_TOWER_EVIDENCE": "ASSAULT_HOMICIDE",
+    "SPATIOTEMPORAL_TOWER_CORRELATION": "ASSAULT_HOMICIDE",
 }
 
 # Robbery/Theft Physical evidence (Vahan Samanvay / ZIPNET-modeled).
@@ -192,6 +203,36 @@ MO_SERIES_MAX_DAYS_APART = 60
 # which needs a charge-sheet-count history (see Organized Crime, not yet
 # built).
 MO_SERIES_MIN_SHARED_ACCUSED_FOR_S112 = 2
+
+# Assault/Homicide Physical evidence.
+# BNSS s.194 (<- CrPC s.174): inquest by police/executive magistrate "in the
+# presence of two or more respectable inhabitants" -- the statute's own
+# figure, not a design default.
+ASSAULT_INQUEST_MIN_WITNESSES = 2
+# BNSS s.196 (<- CrPC s.176) requires prompt intimation of a custodial death
+# to the magistrate/NHRC/family; the statute says "forthwith"/"immediately"
+# without a fixed hour figure, so this is an [I] design default standing in
+# for "forthwith", not a statutory number.
+ASSAULT_CUSTODIAL_INTIMATION_MAX_HOURS = 24
+# BNS s.116 (<- IPC s.320) grievous-hurt classification is defined by injury
+# TYPE (fracture, dislocation, an injury endangering life, etc.), not by
+# follow-up/hospitalisation duration -- there is no statutory day-count
+# threshold. These two figures are [I] design heuristics that flag a
+# classification worth a human re-check when it sits far outside what its
+# own follow-up-days record would suggest (a "GRIEVOUS" case with almost no
+# recorded follow-up, or a "SIMPLE" case with a long one), never a
+# reclassification the platform performs itself.
+ASSAULT_MLC_GRIEVOUS_MIN_FOLLOWUP_DAYS = 2
+ASSAULT_MLC_SIMPLE_MAX_FOLLOWUP_DAYS = 20
+# Physical+Digital joint signal: a tower ping within this many hours of the
+# inquest's recorded time of death, at a locality name matching the
+# inquest's place_of_occurrence, is a spatio-temporal correlation candidate.
+# [I] design default -- the research pass's own spec additionally called
+# for a 5 km geo-proximity leg, dropped here for the same documented reason
+# as the Robbery/Theft MO-series rule: no geocoded coordinates exist in this
+# system to test a real distance against, so locality-name matching stands
+# in for it, honestly, rather than silently.
+ASSAULT_TOWER_SPATIOTEMPORAL_WINDOW_HOURS = 2
 
 # Missing link recovery
 LINK_RECOVERY_MASK_FRACTION = 0.2

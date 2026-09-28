@@ -17,6 +17,12 @@ from app.detectors.mule_layering import detect_mule_layering
 from app.detectors.temporal_motif import detect_call_before_transfer
 from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
 from app.detectors.narcotics_physical import detect_ndps_compliance_flags
+from app.detectors.assault_homicide_physical import (
+    detect_inquest_witness_violations, detect_injury_list_mismatch, detect_postmortem_missing_timing_fields,
+    detect_custodial_death_intimation_violation, detect_mlc_classification_inconsistency,
+    detect_forensic_matches, detect_forensic_confidence_misuse,
+)
+from app.detectors.assault_homicide_digital import detect_uncertified_tower_evidence, detect_spatiotemporal_correlation
 from app.detectors.robbery_theft_physical import (
     detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
 )
@@ -358,10 +364,204 @@ def build_narcotics_physical_leads(conn):
     return leads
 
 
+def build_assault_homicide_physical_leads(conn):
+    """Physical-evidence leads for Assault/Homicide: inquest/post-mortem
+    procedural compliance and forensic cross-exhibit matching. See
+    app/detectors/assault_homicide_physical.py for the per-signal legal/
+    forensic grounding. A forensic match can span two different case
+    files (e.g. a fingerprint tying a current homicide to an unresolved
+    cold case), so those leads carry case_ids (plural) the same way the
+    Robbery/Theft vehicle/property-match leads do."""
+    leads = []
+
+    for hit in detect_inquest_witness_violations(conn):
+        leads.append({
+            "lead_id": _lead_id("INQUEST_WITNESS_VIOLATION", hit["inquest_id"]),
+            "lead_type": "INQUEST_WITNESS_VIOLATION",
+            "severity": "MEDIUM",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Inquest {hit['inquest_id']} recorded only {hit['witness_count']} witness(es), "
+                       f"below the BNSS s.194 (<- CrPC s.174) requirement of {hit['required']} 'respectable "
+                       f"inhabitants' present at the inquest.",
+            "signals": [{"signal": "witness_count", "value": hit["witness_count"]}],
+            "source_record_ids": [hit["inquest_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_injury_list_mismatch(conn):
+        leads.append({
+            "lead_id": _lead_id("INQUEST_PM_INJURY_MISMATCH", f"{hit['inquest_id']}_{hit['pm_id']}"),
+            "lead_type": "INQUEST_PM_INJURY_MISMATCH",
+            "severity": "HIGH",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Inquest {hit['inquest_id']} and post-mortem {hit['pm_id']} disagree on the "
+                       f"injury list -- missing from inquest: {hit['missing_from_inquest'] or 'none'}; "
+                       f"missing from post-mortem: {hit['missing_from_pm'] or 'none'}.",
+            "signals": [{"signal": "missing_from_inquest", "value": hit["missing_from_inquest"]},
+                        {"signal": "missing_from_pm", "value": hit["missing_from_pm"]}],
+            "source_record_ids": [hit["inquest_id"], hit["pm_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_postmortem_missing_timing_fields(conn):
+        leads.append({
+            "lead_id": _lead_id("POSTMORTEM_MISSING_TIMING_FIELDS", hit["pm_id"]),
+            "lead_type": "POSTMORTEM_MISSING_TIMING_FIELDS",
+            "severity": "MEDIUM",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Post-mortem {hit['pm_id']} is missing {', '.join(hit['missing_fields'])} -- "
+                       f"NHRC Model Autopsy Form fields used to estimate time of death.",
+            "signals": [{"signal": "missing_fields", "value": hit["missing_fields"]}],
+            "source_record_ids": [hit["pm_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_custodial_death_intimation_violation(conn):
+        detail = ("no intimation_ts recorded at all" if hit["violation"] == "INTIMATION_MISSING"
+                  else f"intimated {hit['hours_elapsed']} hours after death")
+        leads.append({
+            "lead_id": _lead_id("CUSTODIAL_DEATH_INTIMATION_VIOLATION", hit["inquest_id"]),
+            "lead_type": "CUSTODIAL_DEATH_INTIMATION_VIOLATION",
+            "severity": "HIGH",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Custodial death, inquest {hit['inquest_id']}: {detail} -- a BNSS s.196 "
+                       f"(<- CrPC s.176) intimation lapse.",
+            "signals": [{"signal": "violation", "value": hit["violation"]},
+                        {"signal": "hours_elapsed", "value": hit["hours_elapsed"]}],
+            "source_record_ids": [hit["inquest_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_mlc_classification_inconsistency(conn):
+        leads.append({
+            "lead_id": _lead_id("MLC_CLASSIFICATION_INCONSISTENCY", hit["mlc_id"]),
+            "lead_type": "MLC_CLASSIFICATION_INCONSISTENCY",
+            "severity": "MEDIUM",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"MLC {hit['mlc_id']}: {hit['issue']} (follow_up_days={hit['follow_up_days']}) -- "
+                       f"worth re-checking the BNS s.116 (<- IPC s.320) classification against the actual "
+                       f"injury list, not a reclassification the platform performs itself.",
+            "signals": [{"signal": "issue", "value": hit["issue"]},
+                        {"signal": "follow_up_days", "value": hit["follow_up_days"]}],
+            "source_record_ids": [hit["mlc_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_forensic_matches(conn):
+        case_ids = sorted({hit["case_id_a"], hit["case_id_b"]})
+        if hit["finding_type"] == "LINK" and hit["match_type"] == "FINGERPRINT":
+            summary = (f"Fingerprint NFN {hit['identifier_value']} links exhibit {hit['exhibit_a']} "
+                       f"(case {hit['case_id_a']}) to exhibit {hit['exhibit_b']} (case {hit['case_id_b']}) "
+                       f"-- an AFIS/NAFIS database hit.")
+            severity = "HIGH"
+        elif hit["finding_type"] == "CANDIDATE_EXAMINER_ASSERTED":
+            summary = (f"Ballistics examiner {hit.get('examiner_name', 'unknown')} opines exhibit "
+                       f"{hit['exhibit_a']} (case {hit['case_id_a']}) matches exhibit {hit['exhibit_b']} "
+                       f"(case {hit['case_id_b']}). {hit['note']}")
+            severity = "MEDIUM"
+        else:
+            summary = (f"DNA report {hit.get('fsl_report_no', '')} matches exhibit {hit['exhibit_a']} "
+                       f"(case {hit['case_id_a']}) to exhibit {hit['exhibit_b']} (case {hit['case_id_b']}).")
+            severity = "HIGH"
+        leads.append({
+            "lead_id": _lead_id(f"FORENSIC_{hit['match_type']}_MATCH" if hit["match_type"] != "BALLISTICS"
+                                 else "FORENSIC_BALLISTICS_EXAMINER_ASSERTED",
+                                 f"{hit['exhibit_a']}_{hit['exhibit_b']}"),
+            "lead_type": (f"FORENSIC_{hit['match_type']}_MATCH" if hit["match_type"] != "BALLISTICS"
+                          else "FORENSIC_BALLISTICS_EXAMINER_ASSERTED"),
+            "severity": severity,
+            "case_id": hit["case_id_a"],
+            "case_ids": case_ids,
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": summary,
+            "signals": [{"signal": "finding_type", "value": hit["finding_type"]}],
+            "source_record_ids": [hit["exhibit_a"], hit["exhibit_b"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_forensic_confidence_misuse(conn):
+        leads.append({
+            "lead_id": _lead_id("FORENSIC_CONFIDENCE_MISUSE", hit["match_id"]),
+            "lead_type": "FORENSIC_CONFIDENCE_MISUSE",
+            "severity": "HIGH",
+            "case_id": hit["case_id_a"],
+            "case_ids": sorted({hit["case_id_a"], hit["case_id_b"]}),
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"{hit['match_type']} match {hit['match_id']} is categorically "
+                       f"'{hit['match_confidence_category']}' but the case file treats it as a positive "
+                       f"match -- Indian FSL {hit['match_type']} results are categorical, never a numeric "
+                       f"likelihood the case file can round up.",
+            "signals": [{"signal": "match_confidence_category", "value": hit["match_confidence_category"]}],
+            "source_record_ids": [hit["match_id"]],
+            "created_at": _now(),
+        })
+
+    return leads
+
+
+def build_assault_homicide_digital_leads(conn):
+    """Digital-evidence leads for Assault/Homicide: BSA s.63/Evidence Act
+    s.65B(4) certification status of tower/cell-site records, and the
+    joint Physical+Digital spatio-temporal correlation signal. See
+    app/detectors/assault_homicide_digital.py for the legal grounding."""
+    leads = []
+
+    for hit in detect_uncertified_tower_evidence(conn):
+        leads.append({
+            "lead_id": _lead_id("UNCERTIFIED_TOWER_EVIDENCE", hit["record_id"]),
+            "lead_type": "UNCERTIFIED_TOWER_EVIDENCE",
+            "severity": "HIGH",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Tower/cell-site record {hit['record_id']} for phone {hit['phone']} at "
+                       f"'{hit['locality_name']}' ({hit['timestamp']}) has no BSA s.63/Evidence Act "
+                       f"s.65B(4) certificate -- per Rahil v. State (NCT of Delhi), 2025 INSC 858, "
+                       f"this is a candidate lead requiring corroboration and certification, never "
+                       f"usable proof as it stands.",
+            "signals": [{"signal": "is_certified_65b", "value": False}],
+            "source_record_ids": [hit["record_id"]],
+            "created_at": _now(),
+        })
+
+    for hit in detect_spatiotemporal_correlation(conn):
+        cert_note = "" if hit["is_certified_65b"] else " (record is NOT yet s.65B(4)-certified)"
+        leads.append({
+            "lead_id": _lead_id("SPATIOTEMPORAL_TOWER_CORRELATION", f"{hit['inquest_id']}_{hit['record_id']}"),
+            "lead_type": "SPATIOTEMPORAL_TOWER_CORRELATION",
+            "severity": "HIGH",
+            "case_id": hit["case_id"],
+            "entities_involved": [],
+            "requires_human_verification": True,
+            "summary": f"Phone {hit['phone']} ping at '{hit['locality_name']}' is within "
+                       f"{hit['hours_from_death']} hours of the recorded time of death at "
+                       f"'{hit['place_of_occurrence']}' (inquest {hit['inquest_id']}){cert_note}.",
+            "signals": [{"signal": "hours_from_death", "value": hit["hours_from_death"]},
+                        {"signal": "is_certified_65b", "value": hit["is_certified_65b"]}],
+            "source_record_ids": [hit["inquest_id"], hit["record_id"]],
+            "created_at": _now(),
+        })
+
+    return leads
+
+
 def build_all_leads(conn):
     return (
         build_leads(conn) + build_women_safety_leads(conn) + build_narcotics_physical_leads(conn)
         + build_robbery_theft_physical_leads(conn) + build_robbery_theft_digital_leads(conn)
+        + build_assault_homicide_physical_leads(conn) + build_assault_homicide_digital_leads(conn)
     )
 
 

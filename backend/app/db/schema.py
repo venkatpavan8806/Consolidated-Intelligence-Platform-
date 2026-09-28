@@ -293,6 +293,129 @@ CREATE TABLE IF NOT EXISTS crime_mo_record (
     FOREIGN KEY(case_id) REFERENCES cases(case_id),
     FOREIGN KEY(fir_id) REFERENCES fir_records(fir_id)
 );
+
+-- ---------------------------------------------------------------------
+-- Assault/Homicide Physical + Digital evidence (Sept 2026 pivot, module 3).
+--
+-- post_mortem_report / inquest_report are deliberately kept generic --
+-- no case_type column, no FK into the case_property/form_type spine --
+-- so the future Trafficking/Missing-Person UIDB (unidentified dead body)
+-- work can reuse this SAME pair rather than duplicating it, per the
+-- research pass's explicit recommendation. A UIDB case simply has an
+-- inquest_report/post_mortem_report with no confirmed deceased_name yet.
+-- ---------------------------------------------------------------------
+
+-- NHRC Model Autopsy Form (Annexure I) fields verified by the research
+-- pass; rectal_temperature/rigor_mortis fields are the two the research
+-- flagged as most commonly missing/incomplete in practice.
+CREATE TABLE IF NOT EXISTS post_mortem_report (
+    pm_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    fir_id TEXT,
+    deceased_name TEXT,
+    date_of_death TEXT,
+    date_of_postmortem TEXT,
+    doctor_name TEXT,
+    place TEXT,
+    cause_of_death TEXT,
+    injury_list_json TEXT NOT NULL DEFAULT '[]',
+    rectal_temperature REAL,
+    rigor_mortis_state TEXT,
+    rigor_mortis_time_estimate TEXT,
+    viscera_preserved INTEGER,
+    viscera_sent_to_fsl_ts TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id)
+);
+
+-- BNSS s.194 (<- CrPC s.174) inquest report + BNSS s.196 (<- CrPC s.176)
+-- custodial-death intimation fields. death_ts/intimation_ts are kept as
+-- full timestamps (the real forms are date-only) because the custodial-
+-- death intimation-timing check and the Physical+Digital spatio-temporal
+-- correlation signal both need genuine timestamps, not just dates.
+CREATE TABLE IF NOT EXISTS inquest_report (
+    inquest_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    fir_id TEXT,
+    deceased_name TEXT,
+    inquest_date TEXT,
+    place_of_occurrence TEXT,
+    witness_count INTEGER,
+    witnesses_json TEXT NOT NULL DEFAULT '[]',
+    injury_list_json TEXT NOT NULL DEFAULT '[]',
+    conducting_officer TEXT,
+    is_custodial_death INTEGER NOT NULL DEFAULT 0,
+    death_ts TEXT,
+    intimation_ts TEXT,
+    body_forwarded_ts TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id)
+);
+
+-- Medico-Legal Case record for a non-fatal assault (BNS s.116, <- IPC
+-- s.320 grievous-hurt classification).
+CREATE TABLE IF NOT EXISTS mlc_record (
+    mlc_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    fir_id TEXT,
+    patient_name TEXT,
+    hospital TEXT,
+    date_of_examination TEXT,
+    injury_list_json TEXT NOT NULL DEFAULT '[]',
+    injury_classification TEXT,  -- SIMPLE | GRIEVOUS
+    treating_doctor TEXT,
+    follow_up_days INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id)
+);
+
+-- Polymorphic forensic-match record. match_confidence is deliberately
+-- represented as TWO separate columns rather than one, because Indian
+-- fingerprint reports report a numeric points-of-similarity score while
+-- ballistics AND DNA reports report a categorical outcome (matches /
+-- excludes / degraded / inconclusive) -- collapsing these into one numeric
+-- field would misrepresent what a DNA/ballistics report actually says.
+-- examiner_asserted distinguishes a real database hit (AFIS/NAFIS
+-- fingerprint search -- India's only verified NETWORKED forensic database)
+-- from an examiner's own opinion comparing two named exhibits (ballistics
+-- has NO verified national networked database per the research pass, so
+-- every ballistics cross-case link here MUST be examiner_asserted=1).
+CREATE TABLE IF NOT EXISTS forensic_match (
+    match_id TEXT PRIMARY KEY,
+    match_type TEXT NOT NULL,  -- FINGERPRINT | BALLISTICS | DNA
+    case_id_a TEXT NOT NULL,
+    case_id_b TEXT NOT NULL,
+    exhibit_a TEXT NOT NULL,
+    exhibit_b TEXT NOT NULL,
+    match_confidence_numeric REAL,     -- fingerprint: points of similarity
+    match_confidence_category TEXT,    -- ballistics/DNA: MATCHES | EXCLUDES | DEGRADED | INCONCLUSIVE
+    examiner_asserted INTEGER NOT NULL DEFAULT 0,
+    examiner_name TEXT,
+    fsl_report_no TEXT,
+    report_date TEXT,
+    identifier_value TEXT,  -- NFN for fingerprint, exhibit F-no for ballistics
+    attributes_json TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY(case_id_a) REFERENCES cases(case_id),
+    FOREIGN KEY(case_id_b) REFERENCES cases(case_id)
+);
+
+-- Digital-evidence cell-site/tower-dump pings, kept separate from
+-- cdr_records (call-to-call records) since a tower ping has no callee --
+-- it's a location fix, not a call. is_certified_65b tracks the BSA 2023
+-- s.63 / Evidence Act s.65B(4) certificate that *Anvar P.V.*, *Arjun
+-- Panditrao Khotkar* and *Rahil v. State (NCT of Delhi)* (2025 INSC 858)
+-- all make a condition precedent for this record to be usable at all.
+CREATE TABLE IF NOT EXISTS tower_location_record (
+    record_id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    cell_id TEXT,
+    locality_name TEXT,
+    timestamp TEXT NOT NULL,
+    is_certified_65b INTEGER NOT NULL DEFAULT 0,
+    certificate_ref TEXT,
+    FOREIGN KEY(case_id) REFERENCES cases(case_id)
+);
 """
 
 

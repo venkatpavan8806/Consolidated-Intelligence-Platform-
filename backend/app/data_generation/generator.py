@@ -169,6 +169,77 @@ def add_crime_mo_record(case_id, fir_id, day, **kwargs):
     return rid
 
 
+PM_SEQ = IdSeq("PM")
+INQUEST_SEQ = IdSeq("INQ")
+MLC_SEQ = IdSeq("MLC")
+FORENSIC_SEQ = IdSeq("FOR")
+TOWER_SEQ = IdSeq("TWR")
+
+post_mortem_report_rows = []
+inquest_report_rows = []
+mlc_record_rows = []
+forensic_match_rows = []
+tower_location_record_rows = []
+
+
+def add_post_mortem_report(case_id, day, **kwargs):
+    pid = PM_SEQ.next()
+    post_mortem_report_rows.append((
+        pid, case_id, kwargs.get("fir_id"), kwargs.get("deceased_name"),
+        kwargs.get("date_of_death"), kwargs.get("date_of_postmortem"), kwargs.get("doctor_name"),
+        kwargs.get("place"), kwargs.get("cause_of_death"),
+        json.dumps(kwargs.get("injury_list", [])),
+        kwargs.get("rectal_temperature"), kwargs.get("rigor_mortis_state"), kwargs.get("rigor_mortis_time_estimate"),
+        kwargs.get("viscera_preserved"), kwargs.get("viscera_sent_to_fsl_ts"), dt(days=day),
+    ))
+    return pid
+
+
+def add_inquest_report(case_id, day, **kwargs):
+    iid = INQUEST_SEQ.next()
+    inquest_report_rows.append((
+        iid, case_id, kwargs.get("fir_id"), kwargs.get("deceased_name"), kwargs.get("inquest_date"),
+        kwargs.get("place_of_occurrence"), kwargs.get("witness_count"),
+        json.dumps(kwargs.get("witnesses", [])), json.dumps(kwargs.get("injury_list", [])),
+        kwargs.get("conducting_officer"), int(kwargs.get("is_custodial_death", False)),
+        kwargs.get("death_ts"), kwargs.get("intimation_ts"), kwargs.get("body_forwarded_ts"), dt(days=day),
+    ))
+    return iid
+
+
+def add_mlc_record(case_id, day, **kwargs):
+    mid = MLC_SEQ.next()
+    mlc_record_rows.append((
+        mid, case_id, kwargs.get("fir_id"), kwargs.get("patient_name"), kwargs.get("hospital"),
+        kwargs.get("date_of_examination"), json.dumps(kwargs.get("injury_list", [])),
+        kwargs.get("injury_classification"), kwargs.get("treating_doctor"), kwargs.get("follow_up_days"),
+        dt(days=day),
+    ))
+    return mid
+
+
+def add_forensic_match(match_type, case_id_a, case_id_b, exhibit_a, exhibit_b, **kwargs):
+    fid = FORENSIC_SEQ.next()
+    forensic_match_rows.append((
+        fid, match_type, case_id_a, case_id_b, exhibit_a, exhibit_b,
+        kwargs.get("match_confidence_numeric"), kwargs.get("match_confidence_category"),
+        int(kwargs.get("examiner_asserted", False)), kwargs.get("examiner_name"),
+        kwargs.get("fsl_report_no"), kwargs.get("report_date"), kwargs.get("identifier_value"),
+        json.dumps(kwargs.get("attributes", {})),
+    ))
+    return fid
+
+
+def add_tower_location_record(case_id, phone, day, hour, minute, **kwargs):
+    tid = TOWER_SEQ.next()
+    tower_location_record_rows.append((
+        tid, case_id, phone, kwargs.get("cell_id"), kwargs.get("locality_name"),
+        dt(days=day, hours=hour, minutes=minute),
+        int(kwargs.get("is_certified_65b", False)), kwargs.get("certificate_ref"),
+    ))
+    return tid
+
+
 # ---------------------------------------------------------------------------
 # CASE 1: Fraud Ring Alpha
 # ---------------------------------------------------------------------------
@@ -599,6 +670,156 @@ ground_truth["cases"][CASE_ROBBERY] = {
 }
 
 # ---------------------------------------------------------------------------
+# CASE 6/7/8: Assault/Homicide - Physical (inquest/post-mortem/MLC/forensic)
+# + Digital (tower/cell-site) vertical slice (Sept 2026 pivot, module 3).
+#
+# C006 = the violation-heavy custodial-death case (every planted defect).
+# C007 = an unrelated older cold case, used ONLY so the fingerprint/
+#        ballistics cross-case matches below are genuine cross-CASE links,
+#        not same-case echoes (same pattern as C004/C005 for Robbery/Theft).
+# C008 = a fully compliant homicide, planted so ground truth can assert
+#        ZERO flags fire on clean data (same clean/violation pairing used
+#        for Narcotics' PROP_CLEAN/PROP_VIOLATION).
+# ---------------------------------------------------------------------------
+CASE_ASSAULT = "C006"
+CASE_ASSAULT_COLDCASE = "C007"
+CASE_ASSAULT_CLEAN = "C008"
+
+add_case_type(CASE_ASSAULT, "ASSAULT_HOMICIDE", status="CONFIRMED", reason="seed data: custodial-death homicide investigation")
+add_case_type(CASE_ASSAULT_COLDCASE, "ASSAULT_HOMICIDE", status="CONFIRMED", reason="seed data: unresolved cold case, linked to C006 via forensic match")
+add_case_type(CASE_ASSAULT_CLEAN, "ASSAULT_HOMICIDE", status="CONFIRMED", reason="seed data: compliant homicide investigation")
+
+# --- C006: custodial-death homicide, every planted defect ---
+FIR_ASSAULT = add_fir(CASE_ASSAULT, "Riverside Police Station", 500,
+                       "A detainee Manoj Kumar was found dead inside the police lockup at the Riverside "
+                       "Godown facility. Investigation initiated into the circumstances of the custodial "
+                       "death; a companion assault victim, witness Ram Lal, was also examined at the "
+                       "district hospital in connection with the same incident.")
+
+INQUEST_VIOLATION = add_inquest_report(
+    CASE_ASSAULT, day=500, fir_id=FIR_ASSAULT, deceased_name="Manoj Kumar",
+    inquest_date=dt(days=500), place_of_occurrence="Riverside Godown",
+    witness_count=1, witnesses=["Head Constable Ramesh"],
+    injury_list=["blunt trauma to head", "ligature mark on neck"],
+    conducting_officer="Executive Magistrate S. Rao", is_custodial_death=True,
+    death_ts=dt(days=500, hours=22, minutes=0),
+    intimation_ts=dt(days=503, hours=22, minutes=0),  # 72h later -> INTIMATION_DELAYED
+    body_forwarded_ts=dt(days=501),
+)
+PM_VIOLATION = add_post_mortem_report(
+    CASE_ASSAULT, day=501, fir_id=FIR_ASSAULT, deceased_name="Manoj Kumar",
+    date_of_death=dt(days=500), date_of_postmortem=dt(days=501), doctor_name="Dr. Kavita Iyer",
+    place="District Hospital Mortuary", cause_of_death="Craniocerebral injury",
+    injury_list=["blunt trauma to head"],  # missing "ligature mark on neck" -> INQUEST_PM_INJURY_MISMATCH
+    rectal_temperature=None, rigor_mortis_state=None, rigor_mortis_time_estimate=None,  # missing timing
+    viscera_preserved=1, viscera_sent_to_fsl_ts=dt(days=502),
+)
+MLC_LOW_FOLLOWUP = add_mlc_record(
+    CASE_ASSAULT, day=500, fir_id=FIR_ASSAULT, patient_name="Ram Lal", hospital="District Hospital",
+    date_of_examination=dt(days=500), injury_list=["fracture of forearm"],
+    injury_classification="GRIEVOUS", treating_doctor="Dr. Kavita Iyer", follow_up_days=1,
+)
+MLC_HIGH_FOLLOWUP = add_mlc_record(
+    CASE_ASSAULT, day=500, fir_id=FIR_ASSAULT, patient_name="Ram Lal", hospital="District Hospital",
+    date_of_examination=dt(days=500), injury_list=["bruising"],
+    injury_classification="SIMPLE", treating_doctor="Dr. Kavita Iyer", follow_up_days=25,
+)
+
+# --- C007: cold case (minimal), gives the forensic matches below a genuine second case ---
+FIR_COLDCASE = add_fir(CASE_ASSAULT_COLDCASE, "Riverside Police Station", 100,
+                        "Unresolved case: an unidentified assailant was reported near the Riverside "
+                        "Godown area in connection with an earlier unsolved assault; no arrest made "
+                        "at the time.")
+
+# Fingerprint: AFIS/NAFIS is a real, searchable, networked national database
+# -- an identical NFN across two exhibits is a genuine automated hit.
+FORENSIC_FINGERPRINT_LINK = add_forensic_match(
+    "FINGERPRINT", CASE_ASSAULT, CASE_ASSAULT_COLDCASE, "C006-FP-1", "C007-FP-COLD",
+    match_confidence_numeric=16, identifier_value="NFN-88213", examiner_asserted=False,
+    fsl_report_no="AFIS/2026/1123", report_date=dt(days=505),
+)
+# Ballistics: India has NO verified networked ballistics database -- this
+# is ONLY an examiner's opinion comparing two named exhibits, never a hit.
+FORENSIC_BALLISTICS_CANDIDATE = add_forensic_match(
+    "BALLISTICS", CASE_ASSAULT, CASE_ASSAULT_COLDCASE, "C006-F1", "C007-F1-COLD",
+    match_confidence_category="MATCHES", examiner_asserted=True, examiner_name="Ballistics Expert R. Menon",
+    fsl_report_no="FSL/BAL/2026/0071", report_date=dt(days=506),
+)
+# DNA: categorical outcome misused as a positive match in the case file --
+# INCONCLUSIVE is not a match, whatever the case file's own notes claim.
+FORENSIC_DNA_MISUSE = add_forensic_match(
+    "DNA", CASE_ASSAULT, CASE_ASSAULT, "C006-DNA-CRIMESCENE", "C006-DNA-ACCUSED-REF",
+    match_confidence_category="INCONCLUSIVE", examiner_asserted=False,
+    fsl_report_no="FSL/DNA/2026/0039", report_date=dt(days=507),
+    attributes={"treated_as_positive_in_case_file": True},
+)
+
+# --- Digital: one uncertified tower ping matching the death place/time
+# (triggers BOTH the certification flag and the spatio-temporal
+# correlation), one certified/unrelated ping as noise ---
+TOWER_UNCERTIFIED_MATCH = add_tower_location_record(
+    CASE_ASSAULT, "9840000001", day=500, hour=21, minute=45,
+    cell_id="RVGW-CELL-04", locality_name="Riverside Godown Road", is_certified_65b=False,
+)
+TOWER_CERTIFIED_NOISE = add_tower_location_record(
+    CASE_ASSAULT, "9840000002", day=500, hour=10, minute=0,
+    cell_id="CMKT-CELL-11", locality_name="Central Market", is_certified_65b=True, certificate_ref="CERT-2026-0091",
+)
+
+# --- C008: fully compliant homicide -- proves zero flags on clean data ---
+FIR_ASSAULT_CLEAN = add_fir(CASE_ASSAULT_CLEAN, "Lakeview Police Station", 520,
+                             "Complainant reported the stabbing death of Suresh Rathi at his residence "
+                             "in Lakeview Colony. Investigation conducted with full procedural compliance.")
+INQUEST_CLEAN = add_inquest_report(
+    CASE_ASSAULT_CLEAN, day=520, fir_id=FIR_ASSAULT_CLEAN, deceased_name="Suresh Rathi",
+    inquest_date=dt(days=520), place_of_occurrence="Lakeview Colony",
+    witness_count=3, witnesses=["Witness A", "Witness B", "Witness C"],
+    injury_list=["stab wound to chest"], conducting_officer="Executive Magistrate N. Bhatt",
+    is_custodial_death=False, death_ts=dt(days=520, hours=20, minutes=0),
+)
+PM_CLEAN = add_post_mortem_report(
+    CASE_ASSAULT_CLEAN, day=521, fir_id=FIR_ASSAULT_CLEAN, deceased_name="Suresh Rathi",
+    date_of_death=dt(days=520), date_of_postmortem=dt(days=521), doctor_name="Dr. Anjali Desai",
+    place="City Hospital Mortuary", cause_of_death="Haemorrhagic shock",
+    injury_list=["stab wound to chest"],  # matches inquest exactly
+    rectal_temperature=34.2, rigor_mortis_state="Fully established", rigor_mortis_time_estimate="6-8 hours",
+    viscera_preserved=1, viscera_sent_to_fsl_ts=dt(days=522),
+)
+MLC_CLEAN = add_mlc_record(
+    CASE_ASSAULT_CLEAN, day=520, fir_id=FIR_ASSAULT_CLEAN, patient_name="Suresh Rathi",
+    hospital="City Hospital", date_of_examination=dt(days=520), injury_list=["stab wound to chest"],
+    injury_classification="GRIEVOUS", treating_doctor="Dr. Anjali Desai", follow_up_days=25,  # consistent, no flag
+)
+FORENSIC_DNA_CLEAN_LINK = add_forensic_match(
+    "DNA", CASE_ASSAULT_CLEAN, CASE_ASSAULT_CLEAN, "C008-DNA-CRIMESCENE", "C008-DNA-ACCUSED-REF",
+    match_confidence_category="MATCHES", examiner_asserted=False,
+    fsl_report_no="FSL/DNA/2026/0044", report_date=dt(days=523),
+)
+TOWER_CLEAN_CERTIFIED = add_tower_location_record(
+    CASE_ASSAULT_CLEAN, "9850000001", day=520, hour=19, minute=30,
+    cell_id="LKVW-CELL-02", locality_name="Lakeview Colony Gate", is_certified_65b=True, certificate_ref="CERT-2026-0104",
+)
+
+ground_truth["cases"][CASE_ASSAULT] = {
+    "title": "Assault/Homicide - Riverside Custodial Death",
+    "coldcase_id": CASE_ASSAULT_COLDCASE, "clean_case_id": CASE_ASSAULT_CLEAN,
+    "inquest_violation_id": INQUEST_VIOLATION, "pm_violation_id": PM_VIOLATION,
+    "inquest_min_witnesses": 2,
+    "custodial_intimation_hours": 72,
+    "mismatched_injury": "ligature mark on neck",
+    "mlc_low_followup_id": MLC_LOW_FOLLOWUP, "mlc_high_followup_id": MLC_HIGH_FOLLOWUP,
+    "forensic_fingerprint_link_id": FORENSIC_FINGERPRINT_LINK,
+    "forensic_ballistics_candidate_id": FORENSIC_BALLISTICS_CANDIDATE,
+    "forensic_dna_misuse_id": FORENSIC_DNA_MISUSE,
+    "tower_uncertified_id": TOWER_UNCERTIFIED_MATCH, "tower_certified_noise_id": TOWER_CERTIFIED_NOISE,
+}
+ground_truth["cases"][CASE_ASSAULT_CLEAN] = {
+    "title": "Assault/Homicide - Lakeview Compliant Investigation",
+    "inquest_clean_id": INQUEST_CLEAN, "pm_clean_id": PM_CLEAN, "mlc_clean_id": MLC_CLEAN,
+    "forensic_dna_clean_link_id": FORENSIC_DNA_CLEAN_LINK, "tower_clean_id": TOWER_CLEAN_CERTIFIED,
+}
+
+# ---------------------------------------------------------------------------
 # Background noise: unrelated random activity for realism / false-positive testing
 # ---------------------------------------------------------------------------
 NOISE_PHONES = [f"97000{str(i).zfill(5)}" for i in range(1, 25)]
@@ -628,6 +849,9 @@ def generate(reset: bool = True):
             (CASE_NARCOTICS, "Narcotics - Sonepur Storage Unit", "narcotics", dt(days=150)),
             (CASE_ROBBERY, "Robbery/Theft - Ring Bazaar Vehicle Theft Ring", "robbery_theft", dt(days=200)),
             (CASE_ROBBERY_RECOVERY, "Recovered Property - Ring Bazaar Raid", "robbery_theft", dt(days=215)),
+            (CASE_ASSAULT, "Assault/Homicide - Riverside Custodial Death", "assault_homicide", dt(days=500)),
+            (CASE_ASSAULT_COLDCASE, "Assault/Homicide - Riverside Cold Case", "assault_homicide", dt(days=100)),
+            (CASE_ASSAULT_CLEAN, "Assault/Homicide - Lakeview Compliant Investigation", "assault_homicide", dt(days=520)),
         ],
     )
     cur.executemany(
@@ -671,6 +895,38 @@ def generate(reset: bool = True):
         "operates_with_accomplices, is_recidivist, is_generally_armed) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         crime_mo_record_rows,
+    )
+    cur.executemany(
+        "INSERT INTO post_mortem_report (pm_id, case_id, fir_id, deceased_name, date_of_death, "
+        "date_of_postmortem, doctor_name, place, cause_of_death, injury_list_json, rectal_temperature, "
+        "rigor_mortis_state, rigor_mortis_time_estimate, viscera_preserved, viscera_sent_to_fsl_ts, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        post_mortem_report_rows,
+    )
+    cur.executemany(
+        "INSERT INTO inquest_report (inquest_id, case_id, fir_id, deceased_name, inquest_date, "
+        "place_of_occurrence, witness_count, witnesses_json, injury_list_json, conducting_officer, "
+        "is_custodial_death, death_ts, intimation_ts, body_forwarded_ts, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        inquest_report_rows,
+    )
+    cur.executemany(
+        "INSERT INTO mlc_record (mlc_id, case_id, fir_id, patient_name, hospital, date_of_examination, "
+        "injury_list_json, injury_classification, treating_doctor, follow_up_days, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        mlc_record_rows,
+    )
+    cur.executemany(
+        "INSERT INTO forensic_match (match_id, match_type, case_id_a, case_id_b, exhibit_a, exhibit_b, "
+        "match_confidence_numeric, match_confidence_category, examiner_asserted, examiner_name, "
+        "fsl_report_no, report_date, identifier_value, attributes_json) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        forensic_match_rows,
+    )
+    cur.executemany(
+        "INSERT INTO tower_location_record (record_id, case_id, phone, cell_id, locality_name, timestamp, "
+        "is_certified_65b, certificate_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        tower_location_record_rows,
     )
     cur.executemany(
         "INSERT INTO intel_records (record_id, case_id, source_category, reporting_unit, date, text) "
