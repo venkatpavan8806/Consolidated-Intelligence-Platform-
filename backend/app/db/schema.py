@@ -33,12 +33,35 @@ CREATE TABLE IF NOT EXISTS intel_records (
     FOREIGN KEY(case_id) REFERENCES cases(case_id)
 );
 
+-- caller_imei / callee_imei / call_type extend the original 4-field CDR
+-- row with the verified Indian-TSP CDR field set (per the research pass's
+-- DE-C source): target/A-party MSISDN, B-party, call type (MO/MT voice vs
+-- data), IMEI -- the fields investigators and courts actually rely on, per
+-- DoT's Unified Licence requirement to archive CDR/EDR/IPDR for >=2 years.
+-- call_type distinguishes a traditional GSM voice call (captured in a
+-- telecom CDR, with reliable first/last-cell tower data) from an IP-based
+-- call over a data/OTT channel (captured, if at all, only in an IPDR --
+-- Internet Protocol Detail Record -- a separate, less complete artifact
+-- with no equivalent tower trail) -- an [I] simplification down to the two
+-- values a mentor review asked for, from the research's fuller
+-- MO/MT-voice/SMS-MO/MT/data enumeration.
+-- caller_imei/callee_imei are nullable: a real single-operator CDR export
+-- only ever carries the IMEI of the SUBSCRIBER whose records were
+-- requested (the "target"/A-party), never both sides at once -- recording
+-- both here is this platform's own modeling choice (an [I] design choice,
+-- not a claim that any single real export has both), made so that
+-- cross-operator ingestion (multiple nodal-officer exports merged into one
+-- case) can still support the same-IMEI-different-MSISDN device-continuity
+-- signal below without an artificial single-sided restriction.
 CREATE TABLE IF NOT EXISTS cdr_records (
     record_id TEXT PRIMARY KEY,
     caller TEXT NOT NULL,
     callee TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    duration_sec INTEGER NOT NULL
+    duration_sec INTEGER NOT NULL,
+    caller_imei TEXT,
+    callee_imei TEXT,
+    call_type TEXT NOT NULL DEFAULT 'GSM_CALL'  -- GSM_CALL | IP_CALL
 );
 
 CREATE TABLE IF NOT EXISTS transaction_records (

@@ -34,6 +34,7 @@ from app.detectors.trafficking_physical import (
 from app.detectors.organized_crime_digital import (
     detect_cross_case_identifier_links, detect_shared_infrastructure, detect_syndicate_charge_sheet_threshold,
 )
+from app.detectors.imei_mapping import detect_imei_msisdn_mapping, detect_imei_corroborated_burner_rotation
 
 
 def _lead_id(lead_type: str, key: str) -> str:
@@ -104,6 +105,61 @@ def build_leads(conn):
             "signals": [
                 {"signal": "shared_contact_count", "value": hit["shared_contact_count"]},
                 {"signal": "jaccard", "value": hit["jaccard"]},
+                {"signal": "activation_gap_days", "value": hit["gap_days"]},
+            ],
+            "source_record_ids": [],
+            "created_at": _now(),
+        })
+
+    # --- IMEI<->MSISDN device-continuity leads (mentor-requested feature:
+    # IMEI mapping, GSM_CALL vs IP_CALL) ---
+    for hit in detect_imei_msisdn_mapping(conn):
+        eids = [e for e in (_phone_entity(conn, m) for m in hit["msisdns"]) if e]
+        corroboration_note = (
+            "backed by GSM-voice CDR tower trail" if hit["tower_corroborated"]
+            else "backed only by IP_CALL records, which carry no reliable tower trail"
+        )
+        leads.append({
+            "lead_id": _lead_id("IMEI_MSISDN_MAPPING", hit["imei"]),
+            "lead_type": "IMEI_MSISDN_MAPPING",
+            "severity": "MEDIUM",
+            "entities_involved": eids,
+            "requires_human_verification": True,
+            "summary": f"Handset IMEI {hit['imei']} was used by {len(hit['msisdns'])} distinct phone numbers "
+                       f"({', '.join(hit['msisdns'])}) -- a device-continuity candidate ({corroboration_note}). "
+                       f"Could be shared/lent-out use, or the same person swapping SIMs to evade surveillance; "
+                       f"needs a human check against the case file either way.",
+            "signals": [
+                {"signal": "distinct_msisdn_count", "value": len(hit["msisdns"])},
+                {"signal": "gsm_call_count", "value": hit["gsm_call_count"]},
+                {"signal": "ip_call_count", "value": hit["ip_call_count"]},
+                {"signal": "tower_corroborated", "value": hit["tower_corroborated"]},
+            ],
+            "source_record_ids": sorted({rid for w in hit["msisdn_windows"].values() for rid in w["record_ids"]}),
+            "created_at": _now(),
+        })
+
+    # --- IMEI-corroborated burner-SIM rotation: same social pattern as
+    # BURNER_ROTATION above, PLUS the earlier/later phone sharing a
+    # handset IMEI -- the SIM-swap-to-evade pattern, now with device-level
+    # evidence, not just contact-overlap. Reported as its own lead rather
+    # than silently upgrading BURNER_ROTATION (see detector docstring). ---
+    for hit in detect_imei_corroborated_burner_rotation(conn):
+        a_eid, b_eid = _phone_entity(conn, hit["phone_earlier"]), _phone_entity(conn, hit["phone_later"])
+        key = f"{hit['phone_earlier']}_{hit['phone_later']}"
+        leads.append({
+            "lead_id": _lead_id("IMEI_CORROBORATED_BURNER_SWAP", key),
+            "lead_type": "IMEI_CORROBORATED_BURNER_SWAP",
+            "severity": "HIGH",
+            "entities_involved": [e for e in (a_eid, b_eid) if e],
+            "requires_human_verification": True,
+            "summary": f"Phone {hit['phone_earlier']} and phone {hit['phone_later']} -- already a contact-overlap "
+                       f"burner-rotation candidate -- were also both used on handset IMEI(s) "
+                       f"{', '.join(hit['shared_imeis'])}, the SIM-swap-to-evade pattern: same physical device, "
+                       f"two SIMs used one after the other.",
+            "signals": [
+                {"signal": "shared_contact_count", "value": hit["shared_contact_count"]},
+                {"signal": "shared_imeis", "value": hit["shared_imeis"]},
                 {"signal": "activation_gap_days", "value": hit["gap_days"]},
             ],
             "source_record_ids": [],

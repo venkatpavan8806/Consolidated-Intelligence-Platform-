@@ -112,6 +112,12 @@ def data_source_coverage(conn):
         sources.append({"source": label, "record_count": row["n"]})
     cdr_count = conn.execute("SELECT COUNT(*) AS n FROM cdr_records").fetchone()["n"]
     sources.append({"source": "Call Detail Records (CDRs)", "record_count": cdr_count})
+    imei_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM cdr_records WHERE caller_imei IS NOT NULL OR callee_imei IS NOT NULL"
+    ).fetchone()["n"]
+    sources.append({"source": "CDR rows carrying handset IMEI", "record_count": imei_count})
+    ip_call_count = conn.execute("SELECT COUNT(*) AS n FROM cdr_records WHERE call_type='IP_CALL'").fetchone()["n"]
+    sources.append({"source": "IP_CALL (VoIP/OTT) records", "record_count": ip_call_count})
     txn_count = conn.execute("SELECT COUNT(*) AS n FROM transaction_records").fetchone()["n"]
     sources.append({"source": "Financial transaction records", "record_count": txn_count})
     property_count = conn.execute("SELECT COUNT(*) AS n FROM case_property").fetchone()["n"]
@@ -178,6 +184,7 @@ def check_detector_hits(conn):
     from app.detectors.organized_crime_digital import (
         detect_cross_case_identifier_links, detect_shared_infrastructure, detect_syndicate_charge_sheet_threshold,
     )
+    from app.detectors.imei_mapping import detect_imei_msisdn_mapping, detect_imei_corroborated_burner_rotation
     from app.classification.case_type_classifier import classify_case
 
     gt = _load_ground_truth()
@@ -195,6 +202,27 @@ def check_detector_hits(conn):
 
     motif_hits = detect_call_before_transfer(conn)
     checks.append({"check": "call_before_transfer_detected", "passed": len(motif_hits) >= 1})
+
+    gt_imei = gt["cases"]["C001"]
+    imei_hits = {h["imei"]: h for h in detect_imei_msisdn_mapping(conn)}
+
+    burner_imei_hit = imei_hits.get(gt_imei["burner_rotation"]["shared_imei"])
+    checks.append({"check": "imei_mapping_detects_burner_shared_handset",
+                   "passed": bool(burner_imei_hit and set(burner_imei_hit["msisdns"]) ==
+                                  {gt_imei["burner_rotation"]["phone_a"], gt_imei["burner_rotation"]["phone_b"]})})
+
+    family_hit = imei_hits.get(gt_imei["imei_family_shared"]["imei"])
+    checks.append({"check": "imei_mapping_detects_legitimate_shared_handset",
+                   "passed": bool(family_hit and family_hit["tower_corroborated"])})
+
+    ip_only_hit = imei_hits.get(gt_imei["imei_ip_call_only"]["imei"])
+    checks.append({"check": "imei_mapping_ip_call_only_not_tower_corroborated",
+                   "passed": bool(ip_only_hit and not ip_only_hit["tower_corroborated"])})
+
+    corroborated_swaps = {(h["phone_earlier"], h["phone_later"]) for h in detect_imei_corroborated_burner_rotation(conn)}
+    checks.append({"check": "imei_corroborated_burner_swap_detected_family_handset_silent",
+                   "passed": (gt_imei["burner_rotation"]["phone_a"], gt_imei["burner_rotation"]["phone_b"]) in corroborated_swaps
+                             and gt_imei["imei_family_shared"]["phone_1"] not in {p for pair in corroborated_swaps for p in pair}})
 
     g = build_analysis_subgraph(conn)
     membership = compute_communities(g)

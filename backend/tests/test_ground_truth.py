@@ -30,6 +30,7 @@ from app.detectors.trafficking_physical import (
 from app.detectors.organized_crime_digital import (
     detect_cross_case_identifier_links, detect_shared_infrastructure, detect_syndicate_charge_sheet_threshold,
 )
+from app.detectors.imei_mapping import detect_imei_msisdn_mapping, detect_imei_corroborated_burner_rotation
 from app.classification.case_type_classifier import (
     classify_case, suggest_case_types_for_case, score_keyword_signals,
 )
@@ -638,3 +639,46 @@ def test_organized_crime_lone_accused_never_forms_syndicate(conn):
     hits = detect_syndicate_charge_sheet_threshold(conn)
     for h in hits:
         assert lone_entity_id not in h["syndicate_members"]
+
+
+def test_imei_mapping_detects_shared_handset_across_msisdns(conn):
+    gt = _gt()["cases"]["C001"]
+    hits = {h["imei"]: h for h in detect_imei_msisdn_mapping(conn)}
+
+    burner_hit = hits.get(gt["burner_rotation"]["shared_imei"])
+    assert burner_hit, "the burner-rotation pair's shared handset IMEI must be found"
+    assert set(burner_hit["msisdns"]) == {gt["burner_rotation"]["phone_a"], gt["burner_rotation"]["phone_b"]}
+    assert burner_hit["gsm_call_count"] > 0 and burner_hit["ip_call_count"] > 0, \
+        "the planted scenario mixes GSM_CALL and IP_CALL rows on the same handset"
+    assert burner_hit["tower_corroborated"], \
+        "at least one GSM_CALL row exists for this IMEI, so it must be tower-corroborated"
+
+
+def test_imei_mapping_legitimate_shared_handset_detected_without_burner_pattern(conn):
+    gt = _gt()["cases"]["C001"]["imei_family_shared"]
+    hits = {h["imei"]: h for h in detect_imei_msisdn_mapping(conn)}
+    hit = hits.get(gt["imei"])
+    assert hit and set(hit["msisdns"]) == {gt["phone_1"], gt["phone_2"]}
+
+    corroborated_pairs = {(h["phone_earlier"], h["phone_later"]) for h in detect_imei_corroborated_burner_rotation(conn)}
+    flagged_phones = {p for pair in corroborated_pairs for p in pair}
+    assert gt["phone_1"] not in flagged_phones and gt["phone_2"] not in flagged_phones, \
+        "a shared handset with no contact-overlap/activity-gap pattern must not be flagged as a burner swap"
+
+
+def test_imei_mapping_ip_call_only_not_tower_corroborated(conn):
+    gt = _gt()["cases"]["C001"]["imei_ip_call_only"]
+    hits = {h["imei"]: h for h in detect_imei_msisdn_mapping(conn)}
+    hit = hits.get(gt["imei"])
+    assert hit and set(hit["msisdns"]) == {gt["phone_1"], gt["phone_2"]}
+    assert hit["gsm_call_count"] == 0 and hit["ip_call_count"] > 0
+    assert not hit["tower_corroborated"], \
+        "an IMEI backed only by IP_CALL rows carries no reliable tower trail and must not be marked tower-corroborated"
+
+
+def test_imei_corroborated_burner_swap_detected(conn):
+    gt = _gt()["cases"]["C001"]["burner_rotation"]
+    hits = detect_imei_corroborated_burner_rotation(conn)
+    matching = [h for h in hits if h["phone_earlier"] == gt["phone_a"] and h["phone_later"] == gt["phone_b"]]
+    assert matching, "the burner-rotation pair must also be found as an IMEI-corroborated swap"
+    assert gt["shared_imei"] in matching[0]["shared_imeis"]

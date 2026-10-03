@@ -21,6 +21,16 @@ BURNER_MIN_SHARED_CONTACTS = 5
 BURNER_MIN_JACCARD = 0.5
 BURNER_MAX_GAP_DAYS = 10
 
+# IMEI<->MSISDN device-continuity mapping (mentor-requested feature,
+# grounded in the research pass's own DE-C findings: "IMEI from suspect's
+# handset seen with a different SIM near the time -> SIM-swap-to-evade
+# flag" and "Same IMEI active with a new SIM after the missing-date ->
+# device-continuity lead"). A handset (IMEI) genuinely used by >=N distinct
+# phone numbers over time is the signal -- one handset briefly lent to a
+# family member is ordinary life, which is exactly why this is a candidate
+# for human review, never an automated identity claim.
+IMEI_MAPPING_MIN_DISTINCT_MSISDN = 2
+
 # Mule layering thresholds
 MULE_MIN_FAN_IN = 5
 MULE_WINDOW_DAYS = 10

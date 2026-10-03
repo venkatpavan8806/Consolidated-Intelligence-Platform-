@@ -80,9 +80,12 @@ def add_intel(case_id, source_category, reporting_unit, day, text):
     return rid
 
 
-def add_cdr(caller, callee, day, hour, minute, duration):
+def add_cdr(caller, callee, day, hour, minute, duration, caller_imei=None, callee_imei=None, call_type="GSM_CALL"):
     cid = CDR_SEQ.next()
-    cdr_rows.append((cid, caller, callee, dt(days=day, hours=hour, minutes=minute), duration))
+    cdr_rows.append((
+        cid, caller, callee, dt(days=day, hours=hour, minutes=minute), duration,
+        caller_imei, callee_imei, call_type,
+    ))
     return cid
 
 
@@ -404,20 +407,56 @@ add_fir(CASE_FRAUD, "MG Road Police Station", 10,
 add_cdr(PX_PHONE, PY_PHONE, day=10, hour=11, minute=0, duration=180)
 add_txn(PX_ACC, PY_ACC, amount=850000, day=10, hour=11, minute=25)
 
-# --- Planted case: burner-SIM rotation ---
+# --- Planted case: burner-SIM rotation, now device-corroborated via a
+# shared handset IMEI (mentor-requested IMEI-mapping feature) -- the SAME
+# physical phone used for both PHONE_A and PHONE_B, exactly the
+# SIM-swap-to-evade pattern the research pass calls out verbatim. A couple
+# of PHONE_B's calls are tagged IP_CALL (an OTT/VoIP call over data,
+# distinct from a traditional GSM voice call) to exercise that field too,
+# without flipping the overall tower_corroborated verdict since PHONE_A's
+# GSM_CALL rows for the same IMEI are still present.
 PHONE_A = "9810000020"
 PHONE_B = "9810000021"
+BURNER_IMEI = "490154203237518"
 BURNER_CONTACTS = [f"981000010{i}" for i in range(0, 10)]  # 10 shared contacts pool
 A_CONTACTS = BURNER_CONTACTS  # phone A talks to all 10
 B_CONTACTS = BURNER_CONTACTS[:7]  # phone B overlaps with 7 of those 10 (70%)
 # A active days 40-44, then silent. B activates days 46-50 (within days of A going silent).
 for i, c in enumerate(A_CONTACTS):
-    add_cdr(PHONE_A, c, day=40 + (i % 5), hour=9 + (i % 6), minute=(i * 7) % 60, duration=60 + i * 5)
+    add_cdr(PHONE_A, c, day=40 + (i % 5), hour=9 + (i % 6), minute=(i * 7) % 60, duration=60 + i * 5,
+            caller_imei=BURNER_IMEI)
 for i, c in enumerate(B_CONTACTS):
-    add_cdr(PHONE_B, c, day=46 + (i % 5), hour=9 + (i % 6), minute=(i * 11) % 60, duration=50 + i * 4)
+    add_cdr(PHONE_B, c, day=46 + (i % 5), hour=9 + (i % 6), minute=(i * 11) % 60, duration=50 + i * 4,
+            caller_imei=BURNER_IMEI, call_type="IP_CALL" if i < 2 else "GSM_CALL")
 add_intel(CASE_FRAUD, "SURVEILLANCE_REPORT", "Cyber Surveillance Cell", 47,
           "Field surveillance flagged phone 9810000020 as inactive since day 44, with a new "
           "number 9810000021 exhibiting a similar contact pattern shortly after.")
+
+# --- Planted case: a legitimately shared handset -- same IMEI across two
+# numbers that never exhibit the burner-rotation contact/gap pattern at
+# all (overlapping activity windows, no shared contacts). Proves
+# IMEI_MSISDN_MAPPING fires on device-continuity alone, while
+# IMEI_CORROBORATED_BURNER_SWAP correctly stays silent (no social
+# corroboration to attach the device signal to).
+FAMILY_PHONE_1 = "9810000070"
+FAMILY_PHONE_2 = "9810000071"
+FAMILY_SHARED_IMEI = "490154203299001"
+add_cdr(FAMILY_PHONE_1, "9810000201", day=60, hour=9, minute=0, duration=120, caller_imei=FAMILY_SHARED_IMEI)
+add_cdr(FAMILY_PHONE_1, "9810000202", day=61, hour=10, minute=0, duration=90, caller_imei=FAMILY_SHARED_IMEI)
+add_cdr(FAMILY_PHONE_2, "9810000203", day=60, hour=18, minute=0, duration=100, caller_imei=FAMILY_SHARED_IMEI)
+add_cdr(FAMILY_PHONE_2, "9810000204", day=61, hour=19, minute=0, duration=80, caller_imei=FAMILY_SHARED_IMEI)
+
+# --- Planted case: an IMEI seen ONLY on IP_CALL (VoIP/OTT) records --
+# proves tower_corroborated correctly comes back False (an IP_CALL carries
+# no reliable tower trail; see detector module docstring), unlike the
+# burner scenario above where at least one GSM_CALL row backs the IMEI.
+IP_ONLY_PHONE_1 = "9810000072"
+IP_ONLY_PHONE_2 = "9810000073"
+IP_ONLY_IMEI = "490154203299099"
+add_cdr(IP_ONLY_PHONE_1, "9810000301", day=62, hour=11, minute=0, duration=300,
+        caller_imei=IP_ONLY_IMEI, call_type="IP_CALL")
+add_cdr(IP_ONLY_PHONE_2, "9810000302", day=63, hour=12, minute=0, duration=280,
+        caller_imei=IP_ONLY_IMEI, call_type="IP_CALL")
 
 # --- Planted case: utility / customer-care number, high in-degree, never caller ---
 UTILITY_NUMBER = "18001800001"
@@ -473,7 +512,10 @@ ground_truth["cases"][CASE_FRAUD] = {
     "official": {"name": OFFICER_NAME, "phone": OFFICER_PHONE, "must_never_top_ranking": True},
     "utility_number": {"number": UTILITY_NUMBER, "must_never_top_ranking": True},
     "call_before_transfer": {"phones": [PX_PHONE, PY_PHONE], "accounts": [PX_ACC, PY_ACC]},
-    "burner_rotation": {"phone_a": PHONE_A, "phone_b": PHONE_B, "shared_contacts": B_CONTACTS},
+    "burner_rotation": {"phone_a": PHONE_A, "phone_b": PHONE_B, "shared_contacts": B_CONTACTS,
+                        "shared_imei": BURNER_IMEI},
+    "imei_family_shared": {"phone_1": FAMILY_PHONE_1, "phone_2": FAMILY_PHONE_2, "imei": FAMILY_SHARED_IMEI},
+    "imei_ip_call_only": {"phone_1": IP_ONLY_PHONE_1, "phone_2": IP_ONLY_PHONE_2, "imei": IP_ONLY_IMEI},
     "mule_layering": {"senders": SENDERS, "layer1": LAYER1, "layer2": LAYER2},
     "bridge_broker": {"account": BROKER_ACC, "phone": BROKER_PHONE, "community_a": ALPHA, "community_b": BETA},
 }
@@ -1293,7 +1335,8 @@ def generate(reset: bool = True):
         intel_rows,
     )
     cur.executemany(
-        "INSERT INTO cdr_records (record_id, caller, callee, timestamp, duration_sec) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO cdr_records (record_id, caller, callee, timestamp, duration_sec, caller_imei, "
+        "callee_imei, call_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         cdr_rows,
     )
     cur.executemany(
