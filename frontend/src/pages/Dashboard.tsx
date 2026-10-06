@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
-import { api, type GraphData, type Lead, type WomenSafetyData, type ReviewCluster } from '../api/client';
+import { api, type GraphData, type Lead, type ReviewCluster } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useCase } from '../context/CaseContext';
 import { Eyebrow } from '../components/common';
@@ -9,7 +9,6 @@ import Tour, { TOUR_STEPS, hasSeenTour, markTourSeen } from '../components/Tour'
 export interface DashboardData {
   graph: GraphData;
   leads: Lead[];
-  womenSafety: WomenSafetyData;
   reviewQueue: ReviewCluster[];
   reload: () => void;
 }
@@ -22,9 +21,6 @@ export default function Dashboard() {
 
   const [graph, setGraph] = useState<GraphData>({ nodes: [], links: [] });
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [womenSafety, setWomenSafety] = useState<WomenSafetyData>({
-    leads: [], recruiters: [], transporters: [], repeat_locations: [], chain_candidates: [],
-  });
   const [reviewQueue, setReviewQueue] = useState<ReviewCluster[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,12 +44,10 @@ export default function Dashboard() {
     Promise.all([
       api.caseGraph(activeCase.case_id, reason),
       api.caseLeads(activeCase.case_id, reason),
-      api.womenSafety(reason),
       api.reviewQueue(),
-    ]).then(([g, l, ws, rq]) => {
+    ]).then(([g, l, rq]) => {
       setGraph(g);
       setLeads(l);
-      setWomenSafety(ws);
       setReviewQueue(rq);
       if (!hasSeenTour()) {
         markTourSeen();
@@ -81,14 +75,13 @@ export default function Dashboard() {
 
   if (!activeCase) return null;
 
-  const data: DashboardData = { graph, leads, womenSafety, reviewQueue, reload: load };
+  const data: DashboardData = { graph, leads, reviewQueue, reload: load };
 
   const navItems = [
     { to: 'overview', label: 'Overview' },
     { to: 'graph', label: 'Graph', count: graph.nodes.length },
     { to: 'leads', label: 'Leads', count: leads.length },
     { to: 'review-queue', label: 'Review Queue', count: reviewQueue.length },
-    { to: 'women-safety', label: 'Women Safety', count: womenSafety.leads.length, flagship: true },
     { to: 'evaluation', label: 'Self-Evaluation' },
     { to: 'audit', label: 'Audit Chain' },
   ];

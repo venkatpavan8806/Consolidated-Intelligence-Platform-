@@ -11,7 +11,7 @@ from app.api.schemas import (
 from app.audit import chain as audit_chain
 from app.graph.case_view import build_case_graph, get_case_entity_ids
 from app.graph.analytics import run_full_analytics, top_n
-from app.evidence.engine import build_leads, build_women_safety_leads, build_all_leads
+from app.evidence.engine import build_leads, build_all_leads
 from app.evidence.lookup import get_entity_detail
 from app.evaluation.self_eval import run_self_evaluation
 from app.pipeline import run_full_pipeline
@@ -236,50 +236,6 @@ def analytics_summary(reason: str = Query(..., min_length=3), user: dict = Depen
     audit_chain.append_entry(conn, user["username"], "QUERY_ANALYTICS", reason=reason)
     conn.close()
     return result
-
-
-@router.get("/women-safety")
-def women_safety(reason: str = Query(..., min_length=3), user: dict = Depends(get_current_user)):
-    conn = _conn()
-    leads = build_women_safety_leads(conn)
-
-    from app.graph.builder import build_analysis_subgraph
-    from app.graph.analytics import compute_communities
-    from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
-
-    g = build_analysis_subgraph(conn)
-    membership = compute_communities(g)
-    result = detect_transporter_candidates(g, membership)
-
-    def label(eid):
-        row = conn.execute("SELECT canonical_value, entity_type FROM entities WHERE entity_id=?", (eid,)).fetchone()
-        return {"entity_id": eid, "label": row["canonical_value"] if row else eid,
-                "entity_type": row["entity_type"] if row else None}
-
-    recruiters = [{**label(eid), "fanout_count": info["fanout_count"]} for eid, info in result["recruiters"].items()]
-    transporters = [{**label(eid), "methods": info["methods"], "detail": info["detail"]}
-                     for eid, info in result["transporters"].items()]
-    repeat_locations = detect_repeat_locations(conn)
-
-    chain_candidates = []
-    recruiter_ids = {r["entity_id"] for r in recruiters}
-    transporter_ids = {t["entity_id"] for t in transporters}
-    for t in transporters:
-        matches = t["detail"].get("STRUCTURAL_BRIDGE_PATH", {}).get("matches", [])
-        for m in matches:
-            if m["recruiter"] in recruiter_ids:
-                chain_candidates.append({
-                    "recruiter": label(m["recruiter"]),
-                    "transporter": label(t["entity_id"]),
-                    "receiver_side": label(m["high_degree_side_neighbor"]),
-                })
-
-    audit_chain.append_entry(conn, user["username"], "QUERY_WOMEN_SAFETY_VIEW", reason=reason)
-    conn.close()
-    return {
-        "leads": leads, "recruiters": recruiters, "transporters": transporters,
-        "repeat_locations": repeat_locations, "chain_candidates": chain_candidates,
-    }
 
 
 @router.get("/evaluation")

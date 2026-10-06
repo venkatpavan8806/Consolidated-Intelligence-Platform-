@@ -54,7 +54,6 @@ export const api = {
     request(`/review-queue/${clusterId}/resolve`, { method: 'POST', body: JSON.stringify({ decision, notes }) }),
   entityDetail: (entityId: string) => request<any>(`/entities/${entityId}`),
   analyticsSummary: (reason: string) => request<AnalyticsSummary>(`/analytics/summary?reason=${encodeURIComponent(reason)}`),
-  womenSafety: (reason: string) => request<WomenSafetyData>(`/women-safety?reason=${encodeURIComponent(reason)}`),
   caseTypes: (caseId: string) => request<CaseTypeRow[]>(`/cases/${caseId}/case-types`),
   classifyCase: (caseId: string) => request<CaseTypeSuggestion[]>(`/cases/${caseId}/classify`, { method: 'POST' }),
   confirmCaseType: (caseId: string, caseType: string, decision: 'CONFIRMED' | 'REJECTED', notes?: string) =>
@@ -128,14 +127,6 @@ export interface AnalyticsSummary {
   top_broker: { entity_id: string; label: string; entity_type: string; score: number }[];
   community_count: number;
   analysis_graph_size: { nodes: number; edges: number };
-}
-
-export interface WomenSafetyData {
-  leads: Lead[];
-  recruiters: { entity_id: string; label: string; entity_type: string; fanout_count: number }[];
-  transporters: { entity_id: string; label: string; entity_type: string; methods: string[]; detail: any }[];
-  repeat_locations: { entity_id: string; location: string; source_records: string[]; independent_source_count: number; linked_entities: string[] }[];
-  chain_candidates: { recruiter: any; transporter: any; receiver_side: any }[];
 }
 
 // Axis B: case-type classification. A case can carry multiple case types at

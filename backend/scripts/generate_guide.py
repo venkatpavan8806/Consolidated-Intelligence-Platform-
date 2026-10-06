@@ -187,7 +187,7 @@ def build():
         "automatically works out who is really who (so \"Rajesh Kumar\" the accused and a different "
         "\"Rajesh Kumar\" who is just a witness never get mixed up), builds one relationship map, and "
         "flags the specific patterns organised networks use to look fragmented on paper -- mule-account "
-        "chains, burner-SIM swaps, and recruiter-transporter-receiver trafficking chains."
+        "chains, burner-SIM swaps, shared handsets (IMEI), and cross-case organized-crime links."
     ))
     story.append(body(
         "<b>It never decides guilt.</b> Every single finding it produces is a <i>lead</i> that links back "
@@ -224,7 +224,7 @@ def build():
         "For the fullest demo, sign in as <b>admin1</b> -- it has access to everything below. After "
         "signing in, pick a case and type a short reason for opening it (e.g. \"demo walkthrough\"). "
         "This is not a formality: every case you open is permanently logged to the tamper-evident audit "
-        "chain, which is itself one of the things worth showing (Step 8)."
+        "chain, which is itself one of the things worth showing (Step 9)."
     ))
     story.append(PageBreak())
 
@@ -238,6 +238,10 @@ def build():
         ("Overview", "The case at a glance: how many people/phones/accounts are involved, how many "
          "leads have been found, and the highest-severity findings. This is the \"one-screen summary\" "
          "for a commissioner who has thirty seconds."),
+        ("Case Type (new, top of Overview)", "The system suggests what kind of case this is -- Financial "
+         "Fraud, Narcotics, Robbery/Theft, Assault/Homicide, Trafficking/Missing Person or Organized Crime "
+         "-- and shows the evidence behind each suggestion. It only suggests: the investigator presses "
+         "Confirm or Reject, and nothing is run for a case type until a human confirms it."),
         ("Graph", "The actual relationship map. Colour = type of entity (person, phone, account, "
          "vehicle...). A red ring means that entity is deliberately excluded from every ranking below "
          "(an investigating officer's own phone, or a customer-care number) so it never wrongly looks "
@@ -245,13 +249,18 @@ def build():
         ("Leads", "Every pattern the system found, in plain language, with the reasoning and the exact "
          "source record IDs attached. An investigator marks each one Useful / Already Known / Wrong "
          "Person -- the system never closes this loop itself."),
+        ("Organized Crime leads (new, in Leads)", "Look for \"Cross case identifier link\" and shared-"
+         "infrastructure leads: the same phone, bank account or vehicle appearing in separate FIRs. The "
+         "system also groups linked accused into syndicates and counts charge-sheets per syndicate "
+         "(BNS s.111). It reports the count; the investigator decides what it means."),
+        ("Device tracing: IMEI and call type (new, in Leads)", "\"IMEI MSISDN mapping\" shows one handset "
+         "used with several SIM numbers; \"IMEI corroborated burner swap\" is the strongest signal -- a "
+         "suspected burner-SIM switch where the same device appears on both numbers. Every such lead says "
+         "whether it rests on GSM voice calls (which leave a tower trail) or IP/internet calls (which "
+         "do not), so weaker evidence is never presented as strong."),
         ("Review Queue", "Cases where two mentions of a similar name could NOT be confirmed as the same "
          "person from the records alone. The system deliberately refuses to guess here and asks a human "
          "instead."),
-        ("Women Safety (flagship)", "The trafficking-network view: recruiter and transporter candidates, "
-         "and a repeated-location signal (the same real place named in several independent reports). "
-         "This reuses the exact same detection machinery as the financial-fraud view -- point this out, "
-         "it is the single strongest technical claim in the whole system."),
         ("Self-Evaluation", "The system grading its own work: which planted test scenarios it caught, "
          "how confident its text-extraction is, and an honestly-reported (not inflated) accuracy number "
          "for its most experimental feature, missing-link recovery."),
@@ -305,63 +314,21 @@ def build():
     ))
     story.append(PageBreak())
 
-    # ---------------- Real world case 2 ----------------
-    story.append(eyebrow("Real-World Validation - Trafficking Networks"))
-    story.append(h1("This Mirrors an Actual Delhi Police / J&amp;K Police Case"))
-    story.append(body(
-        "On 14 and 19 August 2025, Delhi Police's Anti-Human Trafficking Unit, working with J&amp;K Police, "
-        "dismantled a network trafficking an estimated 500 people over two years for bonded domestic "
-        "labour. The roles investigators identified map directly onto our Recruiter -> Transporter -> "
-        "Receiver detection chain:"
-    ))
-    story.append(data_table(
-        ["Real role (Delhi/Srinagar case)", "Maps to our system"],
-        [
-            ["Salim-ul-Rehman alias Wasim - ran the agency (\"V.A. Manpower Pvt. Ltd.\"), Ganderbal, Srinagar", "RECRUITER: the recruiter fan-out heuristic"],
-            ["Suraj - \"transporting trafficked victims at the behest of Delhi-based agents\" from Old Delhi Railway Station", "TRANSPORTER: the structural bridge-path detector (one foot in the recruiter's contacts, one foot in a denser cluster on the other side)"],
-            ["Md. Talib &amp; Satnam Singh alias \"Sardar Ji\" - arrested at the Srinagar end", "RECEIVER-side cluster"],
-        ],
-        col_widths=[92 * mm, 78 * mm],
-    ))
-    story.append(Spacer(1, 8))
-    story.append(Paragraph(
-        '"Suraj allegedly admitted he ferried trafficked persons from railway stations in Delhi on the '
-        'instructions of agents" -- Hindustan Times, 28 August 2025',
-        styles["QuoteText"]
-    ))
-    story.append(Spacer(1, 6))
-    story.append(body(
-        "Two details in this real case are especially close to features built into this system: victims "
-        "were consistently recruited from the <b>same physical location</b> (Old Delhi Railway Station) "
-        "across multiple, independent police accounts -- exactly the repeated-location signal the "
-        "Women-Safety view surfaces. And the case was cracked using <b>technical and manual "
-        "surveillance</b> -- which is why this system now ingests surveillance reports and "
-        "intelligence-agency reports as their own first-class data sources, not just FIRs."
-    ))
-    story.append(Paragraph(
-        "Sources: ANI, \"Delhi Police busts human trafficking racket, 4 arrested\" (28 Aug 2025) -- "
-        "aninews.in. Hindustan Times, \"Delhi Police busts interstate trafficking network in Srinagar\" "
-        "(28 Aug 2025) -- hindustantimes.com.",
-        styles["Caption"]
-    ))
-    story.append(PageBreak())
-
     # ---------------- Q&A ----------------
     story.append(eyebrow("Anticipated Questions"))
     story.append(h1("If You're Asked..."))
     qa = [
         ("\"Is this trained on real case data?\"",
          "No. Every name, number and record in the demo is synthetic, generated for this presentation. "
-         "The patterns it detects (mule layering, burner-SIM rotation, recruiter-transporter chains) are "
-         "documented, well-known tactics -- validated against the real Operation Chakra-VI and Delhi/"
-         "Srinagar cases on the previous two pages -- but no real person's data is in this system."),
+         "The patterns it detects (mule layering, burner-SIM rotation, shared-device and cross-case identifier links) are "
+         "documented, well-known tactics -- the financial pattern is validated against the real Operation Chakra-VI case on the previous page -- but no real person's data is in this system."),
         ("\"Does the AI decide who's guilty?\"",
          "No, by design. Every output is called a Lead, never a verdict, and every lead requires a human "
          "disposition (Useful / Already Known / Wrong Person) before it goes anywhere. Show the Leads tab."),
         ("\"What stops it from being wrong?\"",
          "Nothing stops any detector from producing a false positive -- and it's built to be transparent "
-         "about that rather than hide it. The Women-Safety recruiter heuristic, for example, is "
-         "deliberately generic and will also flag a burner-rotation phone; every candidate is marked as "
+         "about that rather than hide it. A shared-device link, for example, can also be a family "
+         "handset passed between relatives, not a criminal swap; every candidate is marked as "
          "needing verification for exactly this reason. The Self-Evaluation tab shows this honestly, "
          "including a low single-digit-percent recall number for its hardest, most experimental feature "
          "(missing-link recovery) -- that number was not adjusted to look better."),

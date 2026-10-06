@@ -8,7 +8,6 @@ import Overview from './pages/Overview';
 import GraphExplorer from './pages/GraphExplorer';
 import Leads from './pages/Leads';
 import ReviewQueue from './pages/ReviewQueue';
-import WomenSafety from './pages/WomenSafety';
 import SelfEvaluation from './pages/SelfEvaluation';
 import AuditChain from './pages/AuditChain';
 import type { ReactNode } from 'react';
@@ -30,7 +29,6 @@ function AppRoutes() {
         <Route path="graph" element={<GraphExplorer />} />
         <Route path="leads" element={<Leads />} />
         <Route path="review-queue" element={<ReviewQueue />} />
-        <Route path="women-safety" element={<WomenSafety />} />
         <Route path="evaluation" element={<SelfEvaluation />} />
         <Route path="audit" element={<AuditChain />} />
       </Route>

@@ -521,13 +521,12 @@ ground_truth["cases"][CASE_FRAUD] = {
 }
 
 # ---------------------------------------------------------------------------
-# CASE 2: Missing Persons - Sonepur Corridor (Women Safety flagship)
+# CASE 2: Missing Persons - Sonepur Corridor (Trafficking / Missing Person)
 # ---------------------------------------------------------------------------
 CASE_TRAFFICKING = "C002"
 
 add_case_type(CASE_TRAFFICKING, "TRAFFICKING_MISSING_PERSON", status="CONFIRMED",
-              reason="seed data: legacy category 'women_safety' migrated on schema cutover "
-                     "(HANDOFF.md Section 4: Women Safety is repositioned as this case type, not deleted)")
+              reason="seed data: demo trafficking / missing-person case")
 
 RECRUITER = "9820000001"
 TRANSPORTER = "9820000002"
@@ -1217,7 +1216,7 @@ def generate(reset: bool = True):
         "INSERT INTO cases (case_id, title, category, opened_date) VALUES (?, ?, ?, ?)",
         [
             (CASE_FRAUD, "Fraud Ring Alpha", "financial_fraud", dt(days=0)),
-            (CASE_TRAFFICKING, "Missing Persons - Sonepur Corridor", "women_safety", dt(days=100)),
+            (CASE_TRAFFICKING, "Missing Persons - Sonepur Corridor", "trafficking_missing_person", dt(days=100)),
             (CASE_NARCOTICS, "Narcotics - Sonepur Storage Unit", "narcotics", dt(days=150)),
             (CASE_ROBBERY, "Robbery/Theft - Ring Bazaar Vehicle Theft Ring", "robbery_theft", dt(days=200)),
             (CASE_ROBBERY_RECOVERY, "Recovered Property - Ring Bazaar Raid", "robbery_theft", dt(days=215)),

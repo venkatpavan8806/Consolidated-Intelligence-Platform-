@@ -15,7 +15,6 @@ from app.graph.analytics import compute_communities, compute_broker_scores, comp
 from app.detectors.burner_sim import detect_burner_rotation
 from app.detectors.mule_layering import detect_mule_layering
 from app.detectors.temporal_motif import detect_call_before_transfer
-from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
 from app.detectors.narcotics_physical import detect_ndps_compliance_flags
 from app.detectors.assault_homicide_physical import (
     detect_inquest_witness_violations, detect_injury_list_mismatch, detect_postmortem_missing_timing_fields,
@@ -210,73 +209,6 @@ def build_leads(conn):
                 {"signal": "amount_threshold_used", "value": hit["amount_threshold_used"]},
             ],
             "source_record_ids": [hit["call_record_id"], hit["transfer_record_id"]],
-            "created_at": _now(),
-        })
-
-    return leads
-
-
-def build_women_safety_leads(conn):
-    g = build_analysis_subgraph(conn)
-    membership = compute_communities(g)
-    result = detect_transporter_candidates(g, membership)
-    leads = []
-
-    for eid, info in result["recruiters"].items():
-        leads.append({
-            "lead_id": _lead_id("WOMEN_SAFETY_RECRUITER", eid),
-            "lead_type": "WOMEN_SAFETY_RECRUITER",
-            "severity": "HIGH",
-            "entities_involved": [eid] + info["low_degree_contacts"],
-            "requires_human_verification": True,
-            "summary": f"{entity_label(conn, eid)} fans out to {info['fanout_count']} low-degree contacts "
-                       f"within one community -- matches the recruiter fan-out pattern. This heuristic is "
-                       f"intentionally generic and may also match unrelated hub structures (e.g. a "
-                       f"burner-rotation phone); human verification is required before any action.",
-            "signals": [{"signal": "low_degree_fanout_count", "value": info["fanout_count"]}],
-            "source_record_ids": [],
-            "created_at": _now(),
-        })
-
-    for eid, info in result["transporters"].items():
-        matches = info["detail"].get("STRUCTURAL_BRIDGE_PATH", {}).get("matches", [])
-        community_info = info["detail"].get("COMMUNITY_BRIDGE")
-        summary_parts = []
-        if matches:
-            summary_parts.append(
-                f"low-degree/low-volume node bridging {len(matches)} recruiter contact set(s) to a "
-                f"comparatively high-degree node on the other side"
-            )
-        if community_info:
-            summary_parts.append(
-                f"neighbours span {len(community_info['neighbor_communities'])} separate communities"
-            )
-        leads.append({
-            "lead_id": _lead_id("WOMEN_SAFETY_TRANSPORTER", eid),
-            "lead_type": "WOMEN_SAFETY_TRANSPORTER",
-            "severity": "HIGH",
-            "entities_involved": [eid],
-            "requires_human_verification": True,
-            "method_provenance": info["methods"],
-            "summary": f"{entity_label(conn, eid)} flagged as a possible transporter/intermediary: " +
-                       "; ".join(summary_parts) + ".",
-            "signals": [{"signal": "method", "value": m} for m in info["methods"]],
-            "source_record_ids": [],
-            "created_at": _now(),
-        })
-
-    for loc in detect_repeat_locations(conn):
-        leads.append({
-            "lead_id": _lead_id("REPEAT_LOCATION", loc["entity_id"]),
-            "lead_type": "REPEAT_LOCATION",
-            "severity": "MEDIUM",
-            "entities_involved": [loc["entity_id"]] + loc["linked_entities"],
-            "requires_human_verification": True,
-            "summary": f"Location '{loc['location']}' is named across {loc['independent_source_count']} "
-                       f"independently-sourced records tied to different entities -- worth cross-checking "
-                       f"as a shared operational location.",
-            "signals": [{"signal": "independent_source_count", "value": loc["independent_source_count"]}],
-            "source_record_ids": loc["source_records"],
             "created_at": _now(),
         })
 
@@ -795,7 +727,7 @@ def build_organized_crime_digital_leads(conn):
 
 def build_all_leads(conn):
     return (
-        build_leads(conn) + build_women_safety_leads(conn) + build_narcotics_physical_leads(conn)
+        build_leads(conn) + build_narcotics_physical_leads(conn)
         + build_robbery_theft_physical_leads(conn) + build_robbery_theft_digital_leads(conn)
         + build_assault_homicide_physical_leads(conn) + build_assault_homicide_digital_leads(conn)
         + build_trafficking_physical_leads(conn) + build_organized_crime_digital_leads(conn)

@@ -11,7 +11,6 @@ from app.graph.analytics import run_full_analytics, compute_communities, top_n
 from app.detectors.burner_sim import detect_burner_rotation
 from app.detectors.mule_layering import detect_mule_layering
 from app.detectors.temporal_motif import detect_call_before_transfer
-from app.detectors.women_safety import detect_transporter_candidates, detect_repeat_locations
 from app.detectors.narcotics_physical import detect_ndps_compliance_flags
 from app.detectors.robbery_theft_physical import (
     detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
@@ -139,37 +138,6 @@ def test_bridge_broker_detected(conn):
     broker_eid = row["entity_id"] if row else None
     assert broker_eid in analytics["graph"]
     assert analytics["broker"].get(broker_eid, 0) >= 1
-
-
-def test_women_safety_recruiter_and_transporter_found(conn):
-    gt = _gt()["cases"]["C002"]
-    g = build_analysis_subgraph(conn)
-    membership = compute_communities(g)
-    result = detect_transporter_candidates(g, membership)
-
-    recruiter_eid = _phone_entity(conn, gt["recruiter"])
-    transporter_eid = _phone_entity(conn, gt["transporter"])
-
-    assert recruiter_eid in result["recruiters"], "recruiter must be found via fan-out heuristic"
-    assert transporter_eid in result["transporters"], "transporter must be found via bridge detection"
-    methods = result["transporters"][transporter_eid]["methods"]
-    assert "STRUCTURAL_BRIDGE_PATH" in methods, "structural bridge-path is the primary method for small chains"
-
-
-def test_repeat_location_signal(conn):
-    gt = _gt()["cases"]["C002"]["repeat_location"]
-    results = detect_repeat_locations(conn)
-    matching = [r for r in results if r["location"] == gt["name"]]
-    assert matching, "the repeated trafficking-corridor location must be flagged"
-    assert matching[0]["independent_source_count"] >= gt["min_independent_sources"]
-
-
-def test_mundane_station_not_flagged_as_repeat_location(conn):
-    gt = _gt()["cases"]["C002"]
-    results = detect_repeat_locations(conn)
-    flagged_names = {r["location"] for r in results}
-    assert gt["mundane_station"] not in flagged_names, \
-        "a police station name recurring as the FILING station is expected, not a repeat-location signal"
 
 
 def test_audit_chain_detects_and_recovers_from_tampering(conn):

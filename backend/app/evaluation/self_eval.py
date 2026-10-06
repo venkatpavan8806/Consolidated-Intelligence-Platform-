@@ -164,9 +164,6 @@ def check_detector_hits(conn):
     from app.detectors.burner_sim import detect_burner_rotation
     from app.detectors.mule_layering import detect_mule_layering
     from app.detectors.temporal_motif import detect_call_before_transfer
-    from app.graph.builder import build_analysis_subgraph
-    from app.graph.analytics import compute_communities
-    from app.detectors.women_safety import detect_transporter_candidates
     from app.detectors.narcotics_physical import detect_ndps_compliance_flags
     from app.detectors.robbery_theft_physical import (
         detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
@@ -224,14 +221,6 @@ def check_detector_hits(conn):
                    "passed": (gt_imei["burner_rotation"]["phone_a"], gt_imei["burner_rotation"]["phone_b"]) in corroborated_swaps
                              and gt_imei["imei_family_shared"]["phone_1"] not in {p for pair in corroborated_swaps for p in pair}})
 
-    g = build_analysis_subgraph(conn)
-    membership = compute_communities(g)
-    ws = detect_transporter_candidates(g, membership)
-    recruiter_eid = _entity_for_phone(conn, gt["cases"]["C002"]["recruiter"])
-    transporter_eid = _entity_for_phone(conn, gt["cases"]["C002"]["transporter"])
-    checks.append({"check": "women_safety_recruiter_found", "passed": recruiter_eid in ws["recruiters"]})
-    checks.append({"check": "women_safety_transporter_found", "passed": transporter_eid in ws["transporters"],
-                   "detail": {"methods": ws["transporters"].get(transporter_eid, {}).get("methods")}})
 
     ndps_hits = {h["property_id"]: h for h in detect_ndps_compliance_flags(conn)}
     gt_ndps = gt["cases"]["C003"]

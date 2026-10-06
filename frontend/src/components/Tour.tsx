@@ -16,6 +16,11 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'The case at a glance: how many people/phones/accounts are involved, how many leads have been found, and the highest-severity findings. Start here for a thirty-second summary.',
   },
   {
+    navKey: 'overview',
+    title: 'Case Type (new)',
+    body: 'At the top of the Overview, the system suggests what kind of case this is — Financial Fraud, Narcotics, Robbery/Theft, Assault/Homicide, Trafficking or Organized Crime — and shows the evidence behind each suggestion. It only suggests: you press Confirm or Reject, and nothing runs on a case type until a human confirms it.',
+  },
+  {
     navKey: 'graph',
     title: 'Graph Explorer',
     body: 'The relationship map. Colour = entity type. A red ring means that entity is deliberately excluded from every ranking (an officer’s own phone, or a customer-care number). Click any dot to see the evidence behind it.',
@@ -26,14 +31,19 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'Every pattern the system found, in plain language, with the exact source records behind it. Mark each one Useful / Already Known / Wrong Person — the system never closes this loop itself.',
   },
   {
+    navKey: 'leads',
+    title: 'Organized Crime leads (new)',
+    body: 'Look for “Cross case identifier link” and shared-infrastructure leads: the same phone, bank account or vehicle appearing in separate FIRs. The system also groups linked accused into syndicates and counts charge-sheets per syndicate (BNS s.111) — it shows the count, you decide what it means.',
+  },
+  {
+    navKey: 'leads',
+    title: 'Device tracing: IMEI and call type (new)',
+    body: 'Leads such as “IMEI MSISDN mapping” show one handset used with several SIM numbers. “IMEI corroborated burner swap” is the strongest: a suspected burner-SIM switch where the same device is seen on both numbers. Each lead says whether the evidence comes from GSM voice calls (which leave a tower trail) or IP/internet calls (which do not), so weaker evidence is never passed off as strong.',
+  },
+  {
     navKey: 'review-queue',
     title: 'Review Queue',
     body: 'Cases where two similarly-named mentions could NOT be confirmed as the same person from the records alone. The system asks a human here instead of guessing.',
-  },
-  {
-    navKey: 'women-safety',
-    title: 'Women Safety (flagship)',
-    body: 'The trafficking-network view: recruiter and transporter candidates, plus a repeated-location signal. It reuses the exact same detection machinery as the financial-fraud view.',
   },
   {
     navKey: 'evaluation',
@@ -127,7 +137,7 @@ export default function Tour({ active, step, onNext, onBack, onClose }: TourProp
   const current = TOUR_STEPS[step];
   const isLast = step === TOUR_STEPS.length - 1;
 
-  const tooltipWidth = 320;
+  const tooltipWidth = 400;
   const tooltipLeft = Math.min(left + width + 16, window.innerWidth - tooltipWidth - 16);
   const tooltipTop = Math.max(16, Math.min(top + height / 2 - 90, window.innerHeight - 230));
 
@@ -161,7 +171,7 @@ export default function Tour({ active, step, onNext, onBack, onClose }: TourProp
           <button className="btn" style={{ fontSize: 15, opacity: step === 0 ? 0.4 : 1 }} onClick={onBack} disabled={step === 0}>
             Back
           </button>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 5 }}>
             {TOUR_STEPS.map((_, i) => (
               <span key={i} style={{
                 width: 10, height: 10, borderRadius: '50%',

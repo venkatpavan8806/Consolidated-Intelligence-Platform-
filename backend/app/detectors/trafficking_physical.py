@@ -2,10 +2,8 @@
 Trafficking/Missing-Person Physical-evidence detector: Unidentified Dead
 Body (UIDB) <-> missing-person candidate matching, ZIPNET's own real
 cross-case-link field, and DNA-sample-chain compliance -- the post-mortem/
-body-identification complement to the live-trafficking Digital signals
-(recruiter fan-out, transporter bridge paths -- see app/detectors/
-women_safety.py), for cases that end in an unidentified death rather than
-a rescue.
+body-identification side of a trafficking / missing-person case, for cases
+that end in an unidentified death rather than a rescue.
 
 Every finding is a candidate for a human investigator to check against the
 case file -- a candidate match is never an identification, and an
