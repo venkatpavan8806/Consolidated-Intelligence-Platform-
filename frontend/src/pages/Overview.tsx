@@ -1,6 +1,7 @@
 import { useOutletContext } from 'react-router-dom';
 import type { DashboardData } from './Dashboard';
-import { Eyebrow, StatCard, SeverityBadge } from '../components/common';
+import { Eyebrow, StatCard, SeverityBadge, humanize } from '../components/common';
+import CaseTypePanel from '../components/CaseTypePanel';
 
 export default function Overview() {
   const { graph, leads, reviewQueue } = useOutletContext<DashboardData>();
@@ -13,7 +14,9 @@ export default function Overview() {
   return (
     <div>
       <Eyebrow>Case Overview</Eyebrow>
-      <h1 style={{ fontSize: 26, margin: '10px 0 20px' }}>Investigation Snapshot</h1>
+      <h1 style={{ fontSize: 30, margin: '10px 0 20px' }}>Investigation Snapshot</h1>
+
+      <CaseTypePanel />
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
         <StatCard value={graph.nodes.length} label="entities in view" />
@@ -38,14 +41,14 @@ export default function Overview() {
         {leads.filter(l => l.severity === 'HIGH').slice(0, 6).map(l => (
           <div key={l.lead_id} className="card">
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{l.lead_type}</span>
+              <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-dim)' }}>{humanize(l.lead_type)}</span>
               <SeverityBadge severity={l.severity} />
             </div>
-            <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{l.summary}</div>
+            <div style={{ fontSize: 15, color: 'var(--text-dim)' }}>{l.summary}</div>
           </div>
         ))}
         {leads.filter(l => l.severity === 'HIGH').length === 0 && (
-          <div style={{ color: 'var(--text-faint)', fontSize: 13 }}>No high-severity leads in view.</div>
+          <div style={{ color: 'var(--text-faint)', fontSize: 15 }}>No high-severity leads in view.</div>
         )}
       </div>
     </div>

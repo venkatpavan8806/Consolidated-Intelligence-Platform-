@@ -112,12 +112,42 @@ def data_source_coverage(conn):
         sources.append({"source": label, "record_count": row["n"]})
     cdr_count = conn.execute("SELECT COUNT(*) AS n FROM cdr_records").fetchone()["n"]
     sources.append({"source": "Call Detail Records (CDRs)", "record_count": cdr_count})
+    imei_count = conn.execute(
+        "SELECT COUNT(*) AS n FROM cdr_records WHERE caller_imei IS NOT NULL OR callee_imei IS NOT NULL"
+    ).fetchone()["n"]
+    sources.append({"source": "CDR rows carrying handset IMEI", "record_count": imei_count})
+    ip_call_count = conn.execute("SELECT COUNT(*) AS n FROM cdr_records WHERE call_type='IP_CALL'").fetchone()["n"]
+    sources.append({"source": "IP_CALL (VoIP/OTT) records", "record_count": ip_call_count})
     txn_count = conn.execute("SELECT COUNT(*) AS n FROM transaction_records").fetchone()["n"]
     sources.append({"source": "Financial transaction records", "record_count": txn_count})
     property_count = conn.execute("SELECT COUNT(*) AS n FROM case_property").fetchone()["n"]
     sources.append({"source": "Physical-evidence property/seizure records", "record_count": property_count})
     ndps_count = conn.execute("SELECT COUNT(*) AS n FROM ndps_sampling").fetchone()["n"]
     sources.append({"source": "NDPS Test Memo (Form-6) records", "record_count": ndps_count})
+    mo_count = conn.execute("SELECT COUNT(*) AS n FROM crime_mo_record").fetchone()["n"]
+    sources.append({"source": "NCRB IIF-II Crime Details Form (MO) records", "record_count": mo_count})
+    inquest_count = conn.execute("SELECT COUNT(*) AS n FROM inquest_report").fetchone()["n"]
+    sources.append({"source": "Inquest reports (BNSS s.194)", "record_count": inquest_count})
+    pm_count = conn.execute("SELECT COUNT(*) AS n FROM post_mortem_report").fetchone()["n"]
+    sources.append({"source": "Post-mortem reports (NHRC Model Autopsy Form)", "record_count": pm_count})
+    mlc_count = conn.execute("SELECT COUNT(*) AS n FROM mlc_record").fetchone()["n"]
+    sources.append({"source": "Medico-Legal Case (MLC) records", "record_count": mlc_count})
+    forensic_count = conn.execute("SELECT COUNT(*) AS n FROM forensic_match").fetchone()["n"]
+    sources.append({"source": "Forensic match records (fingerprint/ballistics/DNA)", "record_count": forensic_count})
+    tower_count = conn.execute("SELECT COUNT(*) AS n FROM tower_location_record").fetchone()["n"]
+    sources.append({"source": "Tower/cell-site location records", "record_count": tower_count})
+    mp_count = conn.execute("SELECT COUNT(*) AS n FROM missing_person_report").fetchone()["n"]
+    sources.append({"source": "Missing-person reports", "record_count": mp_count})
+    uidb_count = conn.execute("SELECT COUNT(*) AS n FROM uidb_record").fetchone()["n"]
+    sources.append({"source": "Unidentified Dead Body (ZIPNET/UIDB) records", "record_count": uidb_count})
+    dna_count = conn.execute("SELECT COUNT(*) AS n FROM dna_sample_record").fetchone()["n"]
+    sources.append({"source": "DNA sample chain-of-custody records", "record_count": dna_count})
+    identifier_count = conn.execute("SELECT COUNT(*) AS n FROM common_identifier_index").fetchone()["n"]
+    sources.append({"source": "Common identifier index (MSISDN/ACCOUNT/VEHICLE_REG/ACCUSED_ID)", "record_count": identifier_count})
+    charge_sheet_count = conn.execute("SELECT COUNT(*) AS n FROM charge_sheet").fetchone()["n"]
+    sources.append({"source": "Charge-sheet records (BNS s.111/MCOCA)", "record_count": charge_sheet_count})
+    charge_sheet_accused_count = conn.execute("SELECT COUNT(*) AS n FROM charge_sheet_accused").fetchone()["n"]
+    sources.append({"source": "Charge-sheet accused join records", "record_count": charge_sheet_accused_count})
     return sources
 
 
@@ -134,10 +164,25 @@ def check_detector_hits(conn):
     from app.detectors.burner_sim import detect_burner_rotation
     from app.detectors.mule_layering import detect_mule_layering
     from app.detectors.temporal_motif import detect_call_before_transfer
-    from app.graph.builder import build_analysis_subgraph
-    from app.graph.analytics import compute_communities
-    from app.detectors.women_safety import detect_transporter_candidates
     from app.detectors.narcotics_physical import detect_ndps_compliance_flags
+    from app.detectors.robbery_theft_physical import (
+        detect_vehicle_links, detect_property_item_matches, detect_lingering_property,
+    )
+    from app.detectors.robbery_theft_digital import detect_mo_series
+    from app.detectors.assault_homicide_physical import (
+        detect_inquest_witness_violations, detect_custodial_death_intimation_violation,
+        detect_forensic_matches, detect_forensic_confidence_misuse,
+    )
+    from app.detectors.assault_homicide_digital import detect_uncertified_tower_evidence, detect_spatiotemporal_correlation
+    from app.detectors.trafficking_physical import (
+        detect_uidb_missing_person_candidates, detect_ignored_zipnet_match, detect_unsampled_body,
+        detect_late_dna_dispatch, detect_weak_dna_conclusion_relied_alone,
+    )
+    from app.detectors.organized_crime_digital import (
+        detect_cross_case_identifier_links, detect_shared_infrastructure, detect_syndicate_charge_sheet_threshold,
+    )
+    from app.detectors.imei_mapping import detect_imei_msisdn_mapping, detect_imei_corroborated_burner_rotation
+    from app.classification.case_type_classifier import classify_case
 
     gt = _load_ground_truth()
     checks = []
@@ -155,14 +200,27 @@ def check_detector_hits(conn):
     motif_hits = detect_call_before_transfer(conn)
     checks.append({"check": "call_before_transfer_detected", "passed": len(motif_hits) >= 1})
 
-    g = build_analysis_subgraph(conn)
-    membership = compute_communities(g)
-    ws = detect_transporter_candidates(g, membership)
-    recruiter_eid = _entity_for_phone(conn, gt["cases"]["C002"]["recruiter"])
-    transporter_eid = _entity_for_phone(conn, gt["cases"]["C002"]["transporter"])
-    checks.append({"check": "women_safety_recruiter_found", "passed": recruiter_eid in ws["recruiters"]})
-    checks.append({"check": "women_safety_transporter_found", "passed": transporter_eid in ws["transporters"],
-                   "detail": {"methods": ws["transporters"].get(transporter_eid, {}).get("methods")}})
+    gt_imei = gt["cases"]["C001"]
+    imei_hits = {h["imei"]: h for h in detect_imei_msisdn_mapping(conn)}
+
+    burner_imei_hit = imei_hits.get(gt_imei["burner_rotation"]["shared_imei"])
+    checks.append({"check": "imei_mapping_detects_burner_shared_handset",
+                   "passed": bool(burner_imei_hit and set(burner_imei_hit["msisdns"]) ==
+                                  {gt_imei["burner_rotation"]["phone_a"], gt_imei["burner_rotation"]["phone_b"]})})
+
+    family_hit = imei_hits.get(gt_imei["imei_family_shared"]["imei"])
+    checks.append({"check": "imei_mapping_detects_legitimate_shared_handset",
+                   "passed": bool(family_hit and family_hit["tower_corroborated"])})
+
+    ip_only_hit = imei_hits.get(gt_imei["imei_ip_call_only"]["imei"])
+    checks.append({"check": "imei_mapping_ip_call_only_not_tower_corroborated",
+                   "passed": bool(ip_only_hit and not ip_only_hit["tower_corroborated"])})
+
+    corroborated_swaps = {(h["phone_earlier"], h["phone_later"]) for h in detect_imei_corroborated_burner_rotation(conn)}
+    checks.append({"check": "imei_corroborated_burner_swap_detected_family_handset_silent",
+                   "passed": (gt_imei["burner_rotation"]["phone_a"], gt_imei["burner_rotation"]["phone_b"]) in corroborated_swaps
+                             and gt_imei["imei_family_shared"]["phone_1"] not in {p for pair in corroborated_swaps for p in pair}})
+
 
     ndps_hits = {h["property_id"]: h for h in detect_ndps_compliance_flags(conn)}
     gt_ndps = gt["cases"]["C003"]
@@ -174,6 +232,147 @@ def check_detector_hits(conn):
     ndps_ok = expected_flags.issubset(found_flags)
     checks.append({"check": "ndps_all_planted_violations_flagged", "passed": ndps_ok,
                    "detail": {"expected": sorted(expected_flags), "found": sorted(found_flags)}})
+
+    gt_robbery = gt["cases"]["C004"]
+    vehicle_hits = {(h["stolen_item_id"], h["recovered_item_id"]): h for h in detect_vehicle_links(conn)}
+    tamper_hit = vehicle_hits.get((gt_robbery["vehicle_tamper_stolen_item"], gt_robbery["vehicle_tamper_recovered_item"]))
+    checks.append({"check": "robbery_vehicle_tampering_detected",
+                   "passed": bool(tamper_hit and tamper_hit["tampering_suspected"])})
+
+    property_hits = {(h["stolen_item_id"], h["recovered_item_id"]): h for h in detect_property_item_matches(conn)}
+    link_hit = property_hits.get((gt_robbery["laptop_stolen_item"], gt_robbery["laptop_recovered_item"]))
+    checks.append({"check": "robbery_property_exact_identifier_link_detected",
+                   "passed": bool(link_hit and link_hit["match_type"] == "LINK")})
+
+    lingering_hits = {h["property_id"] for h in detect_lingering_property(conn)}
+    checks.append({"check": "robbery_lingering_property_flagged_compliant_silent",
+                   "passed": gt_robbery["lingering_property_id"] in lingering_hits
+                             and gt_robbery["compliant_property_id"] not in lingering_hits})
+
+    mo_hits = detect_mo_series(conn)
+    expected_pair = set(gt_robbery["mo_series_firs"])
+    s112_ok = any(set((h["fir_a"], h["fir_b"])) == expected_pair and h["bns_112_candidate"] for h in mo_hits)
+    checks.append({"check": "robbery_mo_series_s112_candidate_detected", "passed": s112_ok})
+
+    gt_assault = gt["cases"]["C006"]
+    gt_assault_clean = gt["cases"]["C008"]
+
+    witness_hits = {h["inquest_id"] for h in detect_inquest_witness_violations(conn)}
+    checks.append({"check": "assault_inquest_witness_violation_detected_compliant_silent",
+                   "passed": gt_assault["inquest_violation_id"] in witness_hits
+                             and gt_assault_clean["inquest_clean_id"] not in witness_hits})
+
+    custodial_hits = {h["inquest_id"]: h for h in detect_custodial_death_intimation_violation(conn)}
+    checks.append({"check": "assault_custodial_intimation_delay_detected",
+                   "passed": custodial_hits.get(gt_assault["inquest_violation_id"], {}).get("violation")
+                             == "INTIMATION_DELAYED"})
+
+    forensic_hits = {h["match_id"]: h for h in detect_forensic_matches(conn)}
+    fp_link = forensic_hits.get(gt_assault["forensic_fingerprint_link_id"])
+    ballistics = forensic_hits.get(gt_assault["forensic_ballistics_candidate_id"])
+    checks.append({"check": "assault_fingerprint_afis_link_detected",
+                   "passed": bool(fp_link and fp_link["finding_type"] == "LINK")})
+    checks.append({"check": "assault_ballistics_never_surfaced_as_automated_link",
+                   "passed": bool(ballistics and ballistics["finding_type"] == "CANDIDATE_EXAMINER_ASSERTED")})
+
+    misuse_hits = {h["match_id"] for h in detect_forensic_confidence_misuse(conn)}
+    checks.append({"check": "assault_dna_inconclusive_treated_as_positive_flagged",
+                   "passed": gt_assault["forensic_dna_misuse_id"] in misuse_hits})
+
+    uncertified_hits = {h["record_id"] for h in detect_uncertified_tower_evidence(conn)}
+    checks.append({"check": "assault_uncertified_tower_evidence_flagged_certified_silent",
+                   "passed": gt_assault["tower_uncertified_id"] in uncertified_hits
+                             and gt_assault_clean["tower_clean_id"] not in uncertified_hits})
+
+    spatiotemporal_hits = {h["record_id"] for h in detect_spatiotemporal_correlation(conn)}
+    checks.append({"check": "assault_spatiotemporal_tower_correlation_detected",
+                   "passed": gt_assault["tower_uncertified_id"] in spatiotemporal_hits})
+
+    gt_trafficking = gt["cases"]["C002"]
+
+    candidate_pairs = {(h["uidb_id"], h["missing_person_id"]) for h in detect_uidb_missing_person_candidates(conn)}
+    checks.append({"check": "uidb_candidate_match_detected_noise_silent",
+                   "passed": (gt_trafficking["uidb_candidate_uidb_id"], gt_trafficking["uidb_candidate_missing_person_id"]) in candidate_pairs
+                             and not any(u == gt_trafficking["uidb_noise_id"] for u, _ in candidate_pairs)})
+
+    ignored_hits = {h["uidb_id"] for h in detect_ignored_zipnet_match(conn)}
+    checks.append({"check": "uidb_ignored_zipnet_match_detected_resolved_silent",
+                   "passed": gt_trafficking["uidb_ignored_uidb_id"] in ignored_hits
+                             and gt_trafficking["uidb_clean_uidb_id"] not in ignored_hits})
+
+    unsampled_hits = {h["pm_id"] for h in detect_unsampled_body(conn)}
+    checks.append({"check": "uidb_unsampled_body_detected_sampled_silent",
+                   "passed": gt_trafficking["uidb_candidate_pm_id"] in unsampled_hits
+                             and gt_trafficking["uidb_clean_pm_id"] not in unsampled_hits})
+
+    late_dispatch_hits = {h["sample_id"] for h in detect_late_dna_dispatch(conn)}
+    checks.append({"check": "uidb_late_dna_dispatch_detected_prompt_silent",
+                   "passed": gt_trafficking["uidb_ignored_dna_sample_id"] in late_dispatch_hits
+                             and gt_trafficking["uidb_clean_dna_sample_id"] not in late_dispatch_hits})
+
+    weak_conclusion_hits = {h["sample_id"] for h in detect_weak_dna_conclusion_relied_alone(conn)}
+    checks.append({"check": "uidb_weak_dna_conclusion_relied_alone_detected_clean_silent",
+                   "passed": gt_trafficking["uidb_ignored_dna_sample_id"] in weak_conclusion_hits
+                             and gt_trafficking["uidb_clean_dna_sample_id"] not in weak_conclusion_hits})
+
+    gt_org = gt["cases"]["C009"]
+
+    cross_case_hits = {h["value"]: h for h in detect_cross_case_identifier_links(conn)}
+    vehicle_hit = cross_case_hits.get(gt_org["shared_vehicle"])
+    checks.append({"check": "organized_crime_cross_case_vehicle_link_detected",
+                   "passed": bool(vehicle_hit and set(vehicle_hit["case_ids"]) == {gt_org["linked_case_id"], "C009"}
+                                  and not vehicle_hit["interstate_alert"])})
+
+    interstate_ok = all(
+        cross_case_hits.get(phone) is not None and cross_case_hits[phone]["interstate_alert"]
+        for phone in gt_org["shared_phones_interstate"]
+    )
+    checks.append({"check": "organized_crime_interstate_alert_detected", "passed": interstate_ok})
+
+    cross_case_only_hit = cross_case_hits.get(gt_org["shared_phone_cross_case_only"])
+    checks.append({"check": "organized_crime_cross_case_link_below_interstate_threshold_stays_link",
+                   "passed": bool(cross_case_only_hit and not cross_case_only_hit["interstate_alert"])})
+
+    shared_infra_hits = {h["value"] for h in detect_shared_infrastructure(conn)}
+    checks.append({"check": "organized_crime_shared_infrastructure_detected",
+                   "passed": gt_org["shared_vehicle"] in shared_infra_hits
+                             and all(p in shared_infra_hits for p in gt_org["shared_phones_interstate"])})
+
+    syndicate_hits = detect_syndicate_charge_sheet_threshold(conn)
+    matching_syndicate = next(
+        (h for h in syndicate_hits if set(gt_org["qualifying_charge_sheet_ids"]).issubset(set(h["qualifying_charge_sheet_ids"]))),
+        None,
+    )
+    checks.append({"check": "organized_crime_syndicate_s111_threshold_met_per_syndicate_not_per_accused",
+                   "passed": bool(matching_syndicate and matching_syndicate["threshold_met"]
+                                  and matching_syndicate["qualifying_count"] == 2)})
+
+    excluded_ids = {gt_org["excluded_too_old_charge_sheet_id"], gt_org["excluded_not_cognizable_charge_sheet_id"],
+                    gt_org["excluded_low_punishment_charge_sheet_id"]}
+    checks.append({"check": "organized_crime_charge_sheet_exclusion_filters_applied",
+                   "passed": bool(matching_syndicate) and excluded_ids.isdisjoint(set(matching_syndicate["qualifying_charge_sheet_ids"]))})
+
+    lone_entity = conn.execute(
+        "SELECT entity_id FROM charge_sheet_accused WHERE charge_sheet_id=?",
+        (gt_org["negative_control_lone_charge_sheet_id"],),
+    ).fetchone()
+    lone_never_in_syndicate = not any(
+        lone_entity and lone_entity["entity_id"] in h["syndicate_members"] for h in syndicate_hits
+    )
+    checks.append({"check": "organized_crime_lone_accused_never_forms_syndicate",
+                   "passed": lone_never_in_syndicate})
+
+    expected_top_case_type = {"C001": "FINANCIAL_FRAUD", "C002": "TRAFFICKING_MISSING_PERSON", "C003": "NARCOTICS",
+                               "C004": "ROBBERY_THEFT", "C005": "ROBBERY_THEFT",
+                               "C006": "ASSAULT_HOMICIDE", "C008": "ASSAULT_HOMICIDE",
+                               "C009": "ORGANIZED_CRIME"}
+    for case_id, expected_type in expected_top_case_type.items():
+        suggestions = classify_case(conn, case_id)
+        top_type = suggestions[0]["case_type"] if suggestions else None
+        checks.append({"check": f"case_type_classifier_top_suggestion_{case_id}",
+                       "passed": top_type == expected_type,
+                       "detail": {"expected": expected_type, "got": top_type,
+                                  "all_suggestions": [(s["case_type"], s["confidence"]) for s in suggestions]}})
 
     return checks
 

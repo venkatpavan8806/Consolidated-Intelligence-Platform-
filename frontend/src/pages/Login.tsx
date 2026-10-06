@@ -28,31 +28,28 @@ export default function Login() {
   return (
     <div className="app-shell">
       <div className="app-panel" style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div className="orbit-ring left" />
-        <div className="orbit-ring right" />
-        <div className="orbit-ring inner left" />
-        <form onSubmit={onSubmit} className="card" style={{ width: 380, position: 'relative', zIndex: 1 }}>
+        <form onSubmit={onSubmit} className="card" style={{ width: 460, position: 'relative', zIndex: 1 }}>
           <Eyebrow>Consolidated Intelligence Platform</Eyebrow>
-          <h1 style={{ fontSize: 26, margin: '10px 0 4px' }}>Investigator Sign-In</h1>
-          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 24 }}>
+          <h1 style={{ fontSize: 30, margin: '10px 0 4px' }}>Investigator Sign-In</h1>
+          <p style={{ color: 'var(--text-dim)', fontSize: 15, marginBottom: 24 }}>
             SIH26189 — AI-Powered Criminal Network Analysis System
           </p>
 
-          <label style={{ fontSize: 13.5, color: 'var(--text-dim)' }}>Username</label>
+          <label style={{ fontSize: 16, color: 'var(--text-dim)' }}>Username</label>
           <input className="input" style={{ margin: '6px 0 16px' }} value={username}
                  onChange={e => setUsername(e.target.value)} />
 
-          <label style={{ fontSize: 13.5, color: 'var(--text-dim)' }}>Password</label>
+          <label style={{ fontSize: 16, color: 'var(--text-dim)' }}>Password</label>
           <input className="input" style={{ margin: '6px 0 16px' }} type="password" value={password}
                  onChange={e => setPassword(e.target.value)} />
 
-          {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--red)', fontSize: 15, marginBottom: 12 }}>{error}</div>}
 
           <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign In'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
 
-          <p style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 18 }}>
+          <p style={{ fontSize: 15, color: 'var(--text-faint)', marginTop: 18 }}>
             Demo accounts: investigator1 / investigator2 (case-scoped) · admin1 (full access + audit tools)
           </p>
         </form>
