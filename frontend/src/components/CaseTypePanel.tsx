@@ -75,16 +75,16 @@ export default function CaseTypePanel() {
     <div style={{ marginBottom: 28 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <Eyebrow>Case Type</Eyebrow>
-        <button className="btn" style={{ fontSize: 11.5 }} onClick={runClassifier} disabled={classifying}>
+        <button className="btn" style={{ fontSize: 14 }} onClick={runClassifier} disabled={classifying}>
           {classifying ? 'Classifying…' : '↻ Re-run classifier'}
         </button>
       </div>
 
-      {loading && <div style={{ color: 'var(--text-faint)', fontSize: 13, marginTop: 8 }}>Loading…</div>}
-      {error && <div style={{ color: 'var(--badge-high, #e2685a)', fontSize: 12.5, marginTop: 8 }}>{error}</div>}
+      {loading && <div style={{ color: 'var(--text-faint)', fontSize: 15, marginTop: 8 }}>Loading…</div>}
+      {error && <div style={{ color: 'var(--badge-high, #b3261e)', fontSize: 15, marginTop: 8 }}>{error}</div>}
 
       {!loading && confirmed.length === 0 && suggested.length === 0 && (
-        <div style={{ color: 'var(--text-faint)', fontSize: 13, marginTop: 10 }}>
+        <div style={{ color: 'var(--text-faint)', fontSize: 15, marginTop: 10 }}>
           No case type on record yet. Run the classifier to get a suggestion from the evidence already in this case
           -- an investigator still has to confirm it before anything acts on it.
         </div>
@@ -105,20 +105,20 @@ export default function CaseTypePanel() {
           {suggested.map(r => (
             <div key={r.case_type} className="card-tight" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 220 }}>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>
                   {label(r.case_type)}
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--text-faint)', marginLeft: 8 }}>
+                  <span className="mono" style={{ fontSize: 14, color: 'var(--text-faint)', marginLeft: 8 }}>
                     {r.confidence !== null ? `${Math.round(r.confidence * 100)}% confidence` : 'suggested'}
                   </span>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 2 }}>{r.reason}</div>
+                <div style={{ fontSize: 14, color: 'var(--text-dim)', marginTop: 2 }}>{r.reason}</div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn" style={{ fontSize: 11.5 }} disabled={actingOn === r.case_type}
+                <button className="btn" style={{ fontSize: 14 }} disabled={actingOn === r.case_type}
                         onClick={() => decide(r.case_type, 'CONFIRMED')}>
                   Confirm
                 </button>
-                <button className="btn" style={{ fontSize: 11.5 }} disabled={actingOn === r.case_type}
+                <button className="btn" style={{ fontSize: 14 }} disabled={actingOn === r.case_type}
                         onClick={() => decide(r.case_type, 'REJECTED')}>
                   Reject
                 </button>

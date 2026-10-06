@@ -65,8 +65,8 @@ export default function AuditChain() {
   return (
     <div>
       <Eyebrow>Tamper-Evident Audit Chain</Eyebrow>
-      <h1 style={{ fontSize: 26, margin: '10px 0 6px' }}>Audit Chain</h1>
-      <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 16, maxWidth: 780 }}>
+      <h1 style={{ fontSize: 30, margin: '10px 0 6px' }}>Audit Chain</h1>
+      <p style={{ color: 'var(--text-dim)', fontSize: 15, marginBottom: 16, maxWidth: 780 }}>
         Every entry's hash = SHA-256(prev_hash + "|" + payload_raw). The backend verifies this in Python;
         the browser below independently re-hashes the exact raw string using Web Crypto SubtleCrypto — no
         shared trust between the two checks.
@@ -76,13 +76,13 @@ export default function AuditChain() {
         <div className="card-tight">
           <div className="card-label">Backend Verification (Python)</div>
           <div className={`badge ${backendValid ? 'badge-green' : 'badge-high'}`} style={{ marginTop: 6 }}>
-            {backendValid === null ? '…' : backendValid ? 'CHAIN VALID' : 'TAMPERING DETECTED'}
+            {backendValid === null ? '…' : backendValid ? 'Chain is valid' : 'Tampering detected'}
           </div>
         </div>
         <div className="card-tight">
           <div className="card-label">Browser Verification (SubtleCrypto)</div>
           <div className={`badge ${browserValid ? 'badge-green' : 'badge-high'}`} style={{ marginTop: 6 }}>
-            {browserValid === null ? '…' : browserValid ? 'CHAIN VALID' : 'TAMPERING DETECTED'}
+            {browserValid === null ? '…' : browserValid ? 'Chain is valid' : 'Tampering detected'}
           </div>
         </div>
       </div>
@@ -105,13 +105,13 @@ export default function AuditChain() {
           {entries.map(e => (
             <div key={e.seq} className="card-tight" style={{ borderColor: e.browserValid ? undefined : 'var(--red)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span className="mono" style={{ fontSize: 12.5 }}>#{e.seq} · {e.action} · {e.actor}</span>
+                <span className="mono" style={{ fontSize: 15 }}>#{e.seq} · {e.action} · {e.actor}</span>
                 <span className={`badge ${e.browserValid ? 'badge-green' : 'badge-high'}`}>
-                  {e.browserValid ? 'OK' : 'BROKEN'}
+                  {e.browserValid ? 'Intact' : 'Broken'}
                 </span>
               </div>
-              <div style={{ fontSize: 13.5, color: 'var(--text-dim)', marginTop: 4 }}>{e.reason} {e.case_id ? `(${e.case_id})` : ''}</div>
-              <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginTop: 6, wordBreak: 'break-all' }}>
+              <div style={{ fontSize: 16, color: 'var(--text-dim)', marginTop: 4 }}>{e.reason} {e.case_id ? `(${e.case_id})` : ''}</div>
+              <div className="mono" style={{ fontSize: 14, color: 'var(--text-faint)', marginTop: 6, wordBreak: 'break-all' }}>
                 hash: {e.hash.slice(0, 24)}… · browser: {e.browserHash.slice(0, 24)}…
               </div>
             </div>

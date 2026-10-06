@@ -60,19 +60,26 @@ export function ConnectorChain({ nodes }: { nodes: ConnectorNode[] }) {
 }
 
 export function FlagshipBanner({ children }: { children: ReactNode }) {
-  return <div className="flagship-banner">★ {children}</div>;
+  return <div className="flagship-banner">{children}</div>;
 }
 
 export const ENTITY_TYPE_COLORS: Record<string, string> = {
-  PERSON: '#c4b8ff', PHONE: '#5fc082', ACCOUNT: '#e3a53f', VEHICLE: '#6a5cc4',
-  LOCATION: '#e2685a', ORGANIZATION: '#a89fc4', CASE: '#ffffff',
+  PERSON: '#1d4f91', PHONE: '#1c7440', ACCOUNT: '#b26a00', VEHICLE: '#6b4fa0',
+  LOCATION: '#b3261e', ORGANIZATION: '#566372', CASE: '#17212b',
 };
 
 export function EntityTypeIcon({ type }: { type: string }) {
   return (
     <span style={{
-      display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-      background: ENTITY_TYPE_COLORS[type] || '#a89fc4', marginRight: 6,
+      display: 'inline-block', width: 12, height: 12, borderRadius: '50%',
+      background: ENTITY_TYPE_COLORS[type] || '#566372', marginRight: 6,
     }} />
   );
+}
+
+/** BURNER_ROTATION -> "Burner rotation" (plain, sentence-case labels for readers). */
+export function humanize(s: string): string {
+  const t = s.replace(/_/g, ' ').toLowerCase();
+  const out = t.charAt(0).toUpperCase() + t.slice(1);
+  return out.replace(/\b(imei|msisdn|sim|cdr|ip|gsm)\b/gi, m => m.toUpperCase());
 }

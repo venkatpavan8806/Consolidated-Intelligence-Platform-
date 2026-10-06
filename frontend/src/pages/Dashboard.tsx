@@ -96,20 +96,18 @@ export default function Dashboard() {
   return (
     <div className="app-shell">
       <div className="app-panel" style={{ flexDirection: 'row' }}>
-        <div className="orbit-ring left" />
-        <div className="orbit-ring right" />
 
-        <div style={{ width: 232, borderRight: '1px solid var(--line)', padding: '28px 16px', position: 'relative', zIndex: 1, flexShrink: 0 }}>
-          <Eyebrow>C.I.P.</Eyebrow>
-          <div style={{ fontSize: 15, fontWeight: 600, margin: '8px 0 2px' }}>{activeCase.title}</div>
-          <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 12 }}>{activeCase.case_id}</div>
+        <div style={{ width: 270, background: 'var(--card)', boxShadow: 'var(--shadow)', padding: '28px 18px', position: 'relative', zIndex: 1, flexShrink: 0, overflowY: 'auto' }}>
+          <Eyebrow>Consolidated Intelligence Platform</Eyebrow>
+          <div style={{ fontSize: 17, fontWeight: 600, margin: '8px 0 2px' }}>{activeCase.title}</div>
+          <div className="mono" style={{ fontSize: 14, color: 'var(--text-faint)', marginBottom: 12 }}>{activeCase.case_id}</div>
 
           <button
             className="btn"
-            style={{ width: '100%', fontSize: 12, marginBottom: 16 }}
+            style={{ width: '100%', fontSize: 16, marginBottom: 16 }}
             onClick={startTour}
           >
-            ◎ Take a Tour
+            Take a guided tour
           </button>
 
           <div className="nav-list">
@@ -120,25 +118,25 @@ export default function Dashboard() {
                 data-tour-nav={item.to}
                 className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
               >
-                <span>{item.label}{item.flagship ? ' ★' : ''}</span>
+                <span>{item.label}</span>
                 {item.count !== undefined && <span className="count mono">{item.count}</span>}
               </NavLink>
             ))}
           </div>
 
-          <div style={{ marginTop: 32, borderTop: '1px solid var(--line)', paddingTop: 16 }}>
-            <div style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>{user?.displayName}</div>
-            <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 10 }}>{user?.role}</div>
-            <button className="btn" style={{ width: '100%', fontSize: 12.5 }} onClick={() => navigate('/cases')}>
+          <div style={{ marginTop: 32, paddingTop: 8 }}>
+            <div style={{ fontSize: 15, color: 'var(--text-dim)' }}>{user?.displayName}</div>
+            <div className="mono" style={{ fontSize: 14, color: 'var(--text-faint)', marginBottom: 10 }}>{user?.role}</div>
+            <button className="btn" style={{ width: '100%', fontSize: 15 }} onClick={() => navigate('/cases')}>
               Switch Case
             </button>
-            <button className="btn" style={{ width: '100%', fontSize: 12.5, marginTop: 8 }} onClick={logout}>
+            <button className="btn" style={{ width: '100%', fontSize: 15, marginTop: 8 }} onClick={logout}>
               Sign Out
             </button>
           </div>
         </div>
 
-        <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1, padding: '28px 32px', overflowY: 'auto' }}>
+        <div style={{ flex: 1, minWidth: 0, position: 'relative', zIndex: 1, padding: '32px 40px', overflowY: 'auto' }}>
           {loading ? <div style={{ color: 'var(--text-dim)' }}>Loading case workspace…</div> : <Outlet context={data} />}
         </div>
       </div>

@@ -123,7 +123,7 @@ export default function Tour({ active, step, onNext, onBack, onClose }: TourProp
   const left = rect.left - PAD;
   const width = rect.width + PAD * 2;
   const height = rect.height + PAD * 2;
-  const dim = 'rgba(5,4,10,0.72)';
+  const dim = 'rgba(20,30,45,0.6)';
   const current = TOUR_STEPS[step];
   const isLast = step === TOUR_STEPS.length - 1;
 
@@ -143,7 +143,7 @@ export default function Tour({ active, step, onNext, onBack, onClose }: TourProp
       <div style={{
         position: 'fixed', top, left, width, height, zIndex: 9999, pointerEvents: 'none',
         border: '2px solid var(--violet)', borderRadius: 12,
-        boxShadow: '0 0 0 4px rgba(156,140,245,0.25), 0 0 24px rgba(156,140,245,0.55)',
+        boxShadow: '0 0 0 4px rgba(29,79,145,0.35)',
       }} />
 
       {/* tooltip card */}
@@ -151,25 +151,25 @@ export default function Tour({ active, step, onNext, onBack, onClose }: TourProp
         position: 'fixed', top: tooltipTop, left: tooltipLeft, width: tooltipWidth, zIndex: 10000,
         borderColor: 'var(--violet)',
       }}>
-        <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-faint)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-          <span>STEP {step + 1} OF {TOUR_STEPS.length}</span>
-          <span onClick={onClose} style={{ cursor: 'pointer' }}>SKIP TOUR ✕</span>
+        <div className="mono" style={{ fontSize: 14, color: 'var(--text-faint)', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+          <span>Step {step + 1} of {TOUR_STEPS.length}</span>
+          <span onClick={onClose} style={{ cursor: 'pointer' }}>Skip tour</span>
         </div>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>{current.title}</div>
-        <div style={{ fontSize: 13.5, color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>{current.body}</div>
+        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 8 }}>{current.title}</div>
+        <div style={{ fontSize: 16, color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 16 }}>{current.body}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
-          <button className="btn" style={{ fontSize: 12.5, opacity: step === 0 ? 0.4 : 1 }} onClick={onBack} disabled={step === 0}>
+          <button className="btn" style={{ fontSize: 15, opacity: step === 0 ? 0.4 : 1 }} onClick={onBack} disabled={step === 0}>
             Back
           </button>
           <div style={{ display: 'flex', gap: 4 }}>
             {TOUR_STEPS.map((_, i) => (
               <span key={i} style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: i === step ? 'var(--violet)' : 'var(--line)',
+                width: 10, height: 10, borderRadius: '50%',
+                background: i === step ? 'var(--violet)' : '#b9c3cf',
               }} />
             ))}
           </div>
-          <button className="btn btn-primary" style={{ fontSize: 12.5 }} onClick={onNext}>
+          <button className="btn btn-primary" style={{ fontSize: 15 }} onClick={onNext}>
             {isLast ? 'Finish' : 'Next'}
           </button>
         </div>

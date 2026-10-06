@@ -6,8 +6,8 @@ function CheckRow({ check, passed, detail }: { check: string; passed: boolean; d
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line)' }}>
       <div>
-        <div className="mono" style={{ fontSize: 13.5 }}>{check}</div>
-        {detail && <div className="mono" style={{ fontSize: 12, color: 'var(--text-faint)' }}>{JSON.stringify(detail)}</div>}
+        <div className="mono" style={{ fontSize: 16 }}>{check}</div>
+        {detail && <div className="mono" style={{ fontSize: 14, color: 'var(--text-faint)' }}>{JSON.stringify(detail)}</div>}
       </div>
       <span className={`badge ${passed ? 'badge-green' : 'badge-high'}`}>{passed ? 'PASS' : 'FAIL'}</span>
     </div>
@@ -26,14 +26,14 @@ export default function SelfEvaluation() {
   return (
     <div>
       <Eyebrow>Self-Evaluation</Eyebrow>
-      <h1 style={{ fontSize: 26, margin: '10px 0 6px' }}>Pipeline Self-Evaluation</h1>
-      <p style={{ color: 'var(--text-dim)', fontSize: 13, marginBottom: 20, maxWidth: 780 }}>
+      <h1 style={{ fontSize: 30, margin: '10px 0 6px' }}>Pipeline Self-Evaluation</h1>
+      <p style={{ color: 'var(--text-dim)', fontSize: 15, marginBottom: 20, maxWidth: 780 }}>
         Every number below is computed from this run against the planted ground-truth checklist — never
         hard-coded or improved after the fact.
       </p>
 
       <Eyebrow>Data Source Coverage</Eyebrow>
-      <p style={{ color: 'var(--text-faint)', fontSize: 13.5, margin: '8px 0 12px', maxWidth: 780 }}>
+      <p style={{ color: 'var(--text-faint)', fontSize: 16, margin: '8px 0 12px', maxWidth: 780 }}>
         Every data source category named in the problem statement, with a live record count from this run.
       </p>
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
@@ -81,12 +81,12 @@ export default function SelfEvaluation() {
 
       <Eyebrow>Stage Timings (most recent pipeline run)</Eyebrow>
       {!data.stage_timings?.available ? (
-        <div style={{ color: 'var(--text-faint)', fontSize: 13, marginTop: 12 }}>
+        <div style={{ color: 'var(--text-faint)', fontSize: 15, marginTop: 12 }}>
           {data.stage_timings?.reason || 'No pipeline run recorded yet.'}
         </div>
       ) : (
         <>
-          <div className="mono" style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
+          <div className="mono" style={{ fontSize: 15, color: 'var(--text-faint)', margin: '8px 0 12px' }}>
             last run: {data.stage_timings.run_at}
           </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
