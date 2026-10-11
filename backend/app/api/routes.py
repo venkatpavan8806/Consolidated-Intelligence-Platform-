@@ -84,6 +84,15 @@ def case_leads(case_id: str, reason: str = Query(..., min_length=3), user: dict 
     return active
 
 
+@router.get("/women-safety")
+def women_safety_retired(reason: str = Query(..., min_length=3), user: dict = Depends(get_current_user)):
+    """Retired. The standalone Women Safety view was removed, but the frontend and
+    backend deploy separately: a frontend build older than this backend still
+    requests this on every case load, and a 404 here leaves its whole workspace
+    empty. Returns the old response shape with nothing in it."""
+    return {"leads": [], "recruiters": [], "transporters": [], "repeat_locations": [], "chain_candidates": []}
+
+
 @router.get("/cases/{case_id}/module-status")
 def case_module_status(case_id: str, user: dict = Depends(get_current_user)):
     """For each of the 6 case types: its status on this case and how many of

@@ -168,3 +168,13 @@ def test_evidence_summary_splits_digital_from_physical_correctly(conn):
     assault = _counts(conn, "C006")
     assert assault["INQUEST"] > 0 and assault["POSTMORTEM"] > 0 and assault["TOWER"] > 0
     assert assault["FORENSIC"] > 0, "forensic matches link C006 to C007 via case_id_a/case_id_b"
+
+
+def test_retired_women_safety_endpoint_returns_empty_shape_for_older_frontends():
+    # A frontend build older than the backend still requests this on every case
+    # load; it must answer with the old shape (all empty), not 404.
+    from app.api.routes import women_safety_retired
+
+    assert women_safety_retired(reason="compat check", user={"username": "admin1", "role": "admin"}) == {
+        "leads": [], "recruiters": [], "transporters": [], "repeat_locations": [], "chain_candidates": [],
+    }
