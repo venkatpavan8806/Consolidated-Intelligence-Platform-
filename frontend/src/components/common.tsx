@@ -81,5 +81,20 @@ export function EntityTypeIcon({ type }: { type: string }) {
 export function humanize(s: string): string {
   const t = s.replace(/_/g, ' ').toLowerCase();
   const out = t.charAt(0).toUpperCase() + t.slice(1);
-  return out.replace(/\b(imei|msisdn|sim|cdr|ip|gsm)\b/gi, m => m.toUpperCase());
+  return out
+    .replace(/\b(imei|msisdn|sim|cdr|ip|gsm|uidb|dna|ndps|mlc|zipnet|pm|mo)\b/gi, m => m.toUpperCase())
+    .replace(/\bs(\d{2,3})\b/g, 'S$1');
+}
+
+export const CASE_TYPE_LABELS: Record<string, string> = {
+  FINANCIAL_FRAUD: 'Financial Fraud',
+  TRAFFICKING_MISSING_PERSON: 'Trafficking / Missing Person',
+  NARCOTICS: 'Narcotics',
+  ASSAULT_HOMICIDE: 'Assault / Homicide',
+  ROBBERY_THEFT: 'Robbery / Theft',
+  ORGANIZED_CRIME: 'Organized Crime',
+};
+
+export function caseTypeLabel(caseType: string): string {
+  return CASE_TYPE_LABELS[caseType] || humanize(caseType);
 }

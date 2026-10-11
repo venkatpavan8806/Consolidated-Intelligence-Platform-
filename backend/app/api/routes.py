@@ -12,6 +12,8 @@ from app.audit import chain as audit_chain
 from app.graph.case_view import build_case_graph, get_case_entity_ids
 from app.graph.analytics import run_full_analytics, top_n
 from app.evidence.engine import build_leads, build_all_leads
+from app.evidence.gating import relevant_leads, split_by_activation, module_status
+from app.evidence.summary import evidence_summary
 from app.evidence.lookup import get_entity_detail
 from app.evaluation.self_eval import run_self_evaluation
 from app.pipeline import run_full_pipeline
@@ -65,24 +67,42 @@ def case_graph(case_id: str, reason: str = Query(..., min_length=3), user: dict 
 
 @router.get("/cases/{case_id}/leads")
 def case_leads(case_id: str, reason: str = Query(..., min_length=3), user: dict = Depends(get_current_user)):
+    """Only leads from modules whose case type an investigator has CONFIRMED
+    on this case (plus always-on cross-cutting leads). Leads held back for an
+    unconfirmed case type are counted in GET /cases/{id}/module-status."""
     require_case_access(case_id, user)
     conn = _conn()
-    case_node_ids = get_case_entity_ids(conn, case_id)
-    all_leads = build_all_leads(conn)
-    relevant = [
-        l for l in all_leads
-        if case_node_ids.intersection(l["entities_involved"]) or l.get("case_id") == case_id
-        or case_id in l.get("case_ids", ())
-    ]
+    active, held_back = split_by_activation(conn, case_id, relevant_leads(conn, case_id))
 
     dispositions = {r["lead_id"]: dict(r) for r in conn.execute("SELECT * FROM lead_dispositions").fetchall()}
-    for lead in relevant:
+    for lead in active:
         lead["disposition"] = dispositions.get(lead["lead_id"])
 
     audit_chain.append_entry(conn, user["username"], "GENERATE_LEADS", case_id=case_id, reason=reason,
-                              extra={"lead_count": len(relevant)})
+                              extra={"lead_count": len(active), "held_back_count": len(held_back)})
     conn.close()
-    return relevant
+    return active
+
+
+@router.get("/cases/{case_id}/module-status")
+def case_module_status(case_id: str, user: dict = Depends(get_current_user)):
+    """For each of the 6 case types: its status on this case and how many of
+    this case's leads it is showing vs. holding back until confirmed."""
+    require_case_access(case_id, user)
+    conn = _conn()
+    result = module_status(conn, case_id, relevant_leads(conn, case_id))
+    conn.close()
+    return result
+
+
+@router.get("/cases/{case_id}/evidence-summary")
+def case_evidence_summary(case_id: str, user: dict = Depends(get_current_user)):
+    """Live per-case inventory of the Digital and Physical records connected."""
+    require_case_access(case_id, user)
+    conn = _conn()
+    result = evidence_summary(conn, case_id)
+    conn.close()
+    return result
 
 
 @router.get("/cases/{case_id}/case-types")
@@ -120,7 +140,7 @@ def classify(case_id: str, user: dict = Depends(get_current_user)):
 @router.post("/cases/{case_id}/case-types/{case_type}/confirm")
 def confirm_case_type(case_id: str, case_type: str, body: CaseTypeConfirmRequest, user: dict = Depends(get_current_user)):
     """The human-decision step the classifier's suggestions feed into.
-    Only a CONFIRMED case type is meant to activate that case type's
+    Only a CONFIRMED case type activates that case type's
     modules -- a SUGGESTED row on its own must never be treated as
     confirmed anywhere else in the system."""
     if case_type not in CASE_TYPES:

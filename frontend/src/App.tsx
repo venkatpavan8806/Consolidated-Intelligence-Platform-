@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import CaseSelect from './pages/CaseSelect';
 import Dashboard from './pages/Dashboard';
 import Overview from './pages/Overview';
+import CaseDemo from './pages/CaseDemo';
 import GraphExplorer from './pages/GraphExplorer';
 import Leads from './pages/Leads';
 import ReviewQueue from './pages/ReviewQueue';
@@ -26,6 +27,7 @@ function AppRoutes() {
       <Route path="/dashboard/:caseId" element={<RequireAuth><Dashboard /></RequireAuth>}>
         <Route index element={<Navigate to="overview" replace />} />
         <Route path="overview" element={<Overview />} />
+        <Route path="demo" element={<CaseDemo />} />
         <Route path="graph" element={<GraphExplorer />} />
         <Route path="leads" element={<Leads />} />
         <Route path="review-queue" element={<ReviewQueue />} />

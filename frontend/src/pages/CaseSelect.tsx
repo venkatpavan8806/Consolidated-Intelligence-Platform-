@@ -10,13 +10,22 @@ export default function CaseSelect() {
   const [selected, setSelected] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const { user, logout } = useAuth();
   const { setActiveCase } = useCase();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    api.listCases().then(setCases).catch(e => setError(e.message));
-  }, []);
+  function loadCases() {
+    setLoading(true);
+    setLoadError(null);
+    api.listCases()
+      .then(setCases)
+      .catch(e => setLoadError(e.message || 'could not reach the server'))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(loadCases, []);
 
   function enter() {
     const c = cases.find(c => c.case_id === selected);
@@ -67,7 +76,16 @@ export default function CaseSelect() {
                 </div>
               </div>
             ))}
-            {cases.length === 0 && <div style={{ color: 'var(--text-faint)' }}>No cases assigned to this account.</div>}
+            {loading && <div style={{ color: 'var(--text-faint)' }}>Loading your cases… (the server can take up to a minute to wake after being idle)</div>}
+            {!loading && loadError && (
+              <div className="card-tight">
+                <div style={{ color: 'var(--red)', marginBottom: 8 }}>Could not load your cases: {loadError}</div>
+                <button className="btn" onClick={loadCases}>Try again</button>
+              </div>
+            )}
+            {!loading && !loadError && cases.length === 0 && (
+              <div style={{ color: 'var(--text-faint)' }}>No cases are assigned to this account.</div>
+            )}
           </div>
 
           <label style={{ fontSize: 16, color: 'var(--text-dim)' }}>Reason for query (required, audit-logged)</label>

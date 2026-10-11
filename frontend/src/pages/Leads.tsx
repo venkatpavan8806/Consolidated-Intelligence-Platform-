@@ -1,16 +1,27 @@
-import { useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useOutletContext, useParams, useSearchParams } from 'react-router-dom';
 import type { DashboardData } from './Dashboard';
-import { Eyebrow, SeverityBadge, humanize } from '../components/common';
-import { api } from '../api/client';
+import { Eyebrow, SeverityBadge, humanize, caseTypeLabel } from '../components/common';
+import { api, type ModuleStatus } from '../api/client';
 
 export default function Leads() {
   const { leads, reload } = useOutletContext<DashboardData>();
-  const [filter, setFilter] = useState<string>('ALL');
+  const { caseId } = useParams();
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState<string>(searchParams.get('type') || 'ALL');
   const [busy, setBusy] = useState<string | null>(null);
+  const [modules, setModules] = useState<ModuleStatus[]>([]);
+
+  useEffect(() => {
+    if (!caseId) return;
+    api.moduleStatus(caseId).then(m => setModules(m.modules)).catch(() => setModules([]));
+  }, [caseId, leads]);
 
   const types = ['ALL', ...Array.from(new Set(leads.map(l => l.lead_type)))];
-  const visible = filter === 'ALL' ? leads : leads.filter(l => l.lead_type === filter);
+  const activeFilter = types.includes(filter) ? filter : 'ALL';
+  const visible = activeFilter === 'ALL' ? leads : leads.filter(l => l.lead_type === activeFilter);
+  const heldModules = modules.filter(m => m.held_back_leads > 0);
+  const heldTotal = heldModules.reduce((n, m) => n + m.held_back_leads, 0);
 
   async function disposition(leadId: string, value: string) {
     setBusy(leadId);
@@ -30,12 +41,35 @@ export default function Leads() {
         Every lead is evidence-backed and requires human verification. Nothing here is an accusation.
       </p>
 
+      {heldTotal > 0 && (
+        <div className="card-tight" style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>
+            {heldTotal} more lead{heldTotal === 1 ? '' : 's'} held back until a case type is confirmed
+          </div>
+          <div style={{ fontSize: 15, color: 'var(--text-dim)', margin: '4px 0 10px' }}>
+            Detector modules only switch on for a case type an investigator has confirmed. Waiting:{' '}
+            {heldModules.map((m, i) => (
+              <span key={m.case_type}>
+                {i > 0 && '; '}
+                <strong>{caseTypeLabel(m.case_type)}</strong>
+                {' '}({m.status === 'SUGGESTED' ? 'suggested' : m.status === 'REJECTED' ? 'rejected' : 'not yet suggested'}
+                , {m.held_back_leads} lead{m.held_back_leads === 1 ? '' : 's'})
+              </span>
+            ))}
+            .
+          </div>
+          <Link to={`/dashboard/${caseId}/overview`} className="btn" style={{ textDecoration: 'none', display: 'inline-block' }}>
+            Review case types on Overview
+          </Link>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         {types.map(t => (
           <button
             key={t}
             className="btn"
-            style={{ fontSize: 15, borderColor: filter === t ? 'var(--violet)' : undefined }}
+            style={{ fontSize: 15, borderColor: activeFilter === t ? 'var(--violet)' : undefined }}
             onClick={() => setFilter(t)}
           >
             {t === 'ALL' ? 'All' : humanize(t)} {t !== 'ALL' && `(${leads.filter(l => l.lead_type === t).length})`}

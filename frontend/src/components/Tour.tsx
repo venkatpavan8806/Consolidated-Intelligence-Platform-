@@ -21,6 +21,11 @@ export const TOUR_STEPS: TourStep[] = [
     body: 'At the top of the Overview, the system suggests what kind of case this is — Financial Fraud, Narcotics, Robbery/Theft, Assault/Homicide, Trafficking or Organized Crime — and shows the evidence behind each suggestion. It only suggests: you press Confirm or Reject, and nothing runs on a case type until a human confirms it.',
   },
   {
+    navKey: 'demo',
+    title: 'Case Demo (new)',
+    body: 'A plain-language walkthrough of this exact case: what happened, which digital and physical records are being connected (live counts), what each detector found, and where a human decides. Every case has its own, so you can present straight from this page.',
+  },
+  {
     navKey: 'graph',
     title: 'Graph Explorer',
     body: 'The relationship map. Colour = entity type. A red ring means that entity is deliberately excluded from every ranking (an officer’s own phone, or a customer-care number). Click any dot to see the evidence behind it.',

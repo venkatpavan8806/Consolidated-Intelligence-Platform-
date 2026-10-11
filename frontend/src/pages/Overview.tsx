@@ -4,7 +4,7 @@ import { Eyebrow, StatCard, SeverityBadge, humanize } from '../components/common
 import CaseTypePanel from '../components/CaseTypePanel';
 
 export default function Overview() {
-  const { graph, leads, reviewQueue } = useOutletContext<DashboardData>();
+  const { graph, leads, reviewQueue, reload } = useOutletContext<DashboardData>();
 
   const byType: Record<string, number> = {};
   for (const n of graph.nodes) byType[n.entity_type] = (byType[n.entity_type] || 0) + 1;
@@ -16,7 +16,7 @@ export default function Overview() {
       <Eyebrow>Case Overview</Eyebrow>
       <h1 style={{ fontSize: 30, margin: '10px 0 20px' }}>Investigation Snapshot</h1>
 
-      <CaseTypePanel />
+      <CaseTypePanel onDecided={reload} />
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
         <StatCard value={graph.nodes.length} label="entities in view" />

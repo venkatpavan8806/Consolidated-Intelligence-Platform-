@@ -30,6 +30,18 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ detail: res.statusText }));
+    // A 401 on any call except the login itself means the saved login is no
+    // longer valid (token expired after 8h, or the server's signing secret
+    // changed). Drop it and return to sign-in instead of leaving the user on
+    // a page that silently has no data.
+    if (res.status === 401 && path !== '/auth/login') {
+      setToken(null);
+      try {
+        localStorage.removeItem('cip_user');
+        sessionStorage.removeItem('cip_case_context');
+      } catch { /* storage unavailable: nothing to clear */ }
+      window.location.assign('/login');
+    }
     throw new ApiError(res.status, body.detail || 'request failed');
   }
   return res.json();
@@ -60,6 +72,8 @@ export const api = {
     request<CaseTypeRow>(`/cases/${caseId}/case-types/${caseType}/confirm`, {
       method: 'POST', body: JSON.stringify({ decision, notes }),
     }),
+  moduleStatus: (caseId: string) => request<ModuleStatusResponse>(`/cases/${caseId}/module-status`),
+  evidenceSummary: (caseId: string) => request<EvidenceSummary>(`/cases/${caseId}/evidence-summary`),
   evaluation: () => request<any>('/evaluation'),
   auditChain: () => request<{ entries: AuditEntry[]; verification: { valid: boolean; entry_count: number; broken_at_seq: number[] } }>('/audit/chain'),
   tamperDemo: (seq: number, new_reason: string) =>
@@ -149,6 +163,38 @@ export interface CaseTypeSuggestion {
   confidence: number;
   reason: string;
   signals: { kind: 'STRUCTURAL' | 'KEYWORD'; [key: string]: any }[];
+}
+
+// Case-type gating: a module's leads only appear once its case type is
+// CONFIRMED on this case; until then they are counted here as held back.
+export interface ModuleStatus {
+  case_type: string;
+  status: CaseTypeStatus | 'NOT_SUGGESTED';
+  active_leads: number;
+  held_back_leads: number;
+  lead_type_counts: Record<string, { active: number; held_back: number }>;
+}
+
+export interface ModuleStatusResponse {
+  case_id: string;
+  modules: ModuleStatus[];
+  cross_cutting_leads: number;
+  cross_cutting_lead_type_counts: Record<string, number>;
+}
+
+// Live per-case inventory of connected records. Digital = records the
+// platform reads directly; Physical = records ABOUT physical evidence.
+export interface EvidenceSource {
+  key: string;
+  label: string;
+  branch: 'DIGITAL' | 'PHYSICAL';
+  count: number;
+}
+
+export interface EvidenceSummary {
+  case_id: string;
+  sources: EvidenceSource[];
+  totals: { DIGITAL: number; PHYSICAL: number };
 }
 
 export interface AuditEntry {

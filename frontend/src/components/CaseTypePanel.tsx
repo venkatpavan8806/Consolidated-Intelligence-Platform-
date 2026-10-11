@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api, type CaseTypeRow, ApiError } from '../api/client';
+import { api, type CaseTypeRow, type ModuleStatus, ApiError } from '../api/client';
 import { useCase } from '../context/CaseContext';
-import { Eyebrow } from './common';
+import { Eyebrow, caseTypeLabel } from './common';
 
 // Case-type confirmation UI: the "human always decides" step the
 // classifier's suggestions feed into. A SUGGESTED row is a machine
@@ -10,22 +10,14 @@ import { Eyebrow } from './common';
 // into something the rest of the system (case-type-scoped modules) can act
 // on. A case can hold several CONFIRMED case types at once -- that's
 // expected, not an error state.
-const CASE_TYPE_LABELS: Record<string, string> = {
-  FINANCIAL_FRAUD: 'Financial Fraud',
-  TRAFFICKING_MISSING_PERSON: 'Trafficking / Missing Person',
-  NARCOTICS: 'Narcotics',
-  ASSAULT_HOMICIDE: 'Assault / Homicide',
-  ROBBERY_THEFT: 'Robbery / Theft',
-  ORGANIZED_CRIME: 'Organized Crime',
-};
+const label = caseTypeLabel;
 
-function label(caseType: string) {
-  return CASE_TYPE_LABELS[caseType] || caseType;
-}
-
-export default function CaseTypePanel() {
+// onDecided: called after an investigator confirms/rejects a case type, so the
+// parent can reload leads -- a decision changes which modules are active.
+export default function CaseTypePanel({ onDecided }: { onDecided?: () => void }) {
   const { activeCase } = useCase();
   const [rows, setRows] = useState<CaseTypeRow[]>([]);
+  const [modules, setModules] = useState<ModuleStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [classifying, setClassifying] = useState(false);
   const [actingOn, setActingOn] = useState<string | null>(null);
@@ -34,8 +26,8 @@ export default function CaseTypePanel() {
   function load() {
     if (!activeCase) return;
     setLoading(true);
-    api.caseTypes(activeCase.case_id)
-      .then(setRows)
+    Promise.all([api.caseTypes(activeCase.case_id), api.moduleStatus(activeCase.case_id)])
+      .then(([r, m]) => { setRows(r); setModules(m.modules); })
       .catch(e => setError(e instanceof ApiError ? e.message : 'failed to load case types'))
       .finally(() => setLoading(false));
   }
@@ -60,7 +52,7 @@ export default function CaseTypePanel() {
     setActingOn(caseType);
     setError(null);
     api.confirmCaseType(activeCase.case_id, caseType, decision, notes)
-      .then(load)
+      .then(() => { if (onDecided) onDecided(); else load(); })
       .catch(e => setError(e instanceof ApiError ? e.message : 'could not record decision'))
       .finally(() => setActingOn(null));
   }
@@ -70,6 +62,7 @@ export default function CaseTypePanel() {
   const confirmed = rows.filter(r => r.status === 'CONFIRMED');
   const suggested = rows.filter(r => r.status === 'SUGGESTED');
   const rejected = rows.filter(r => r.status === 'REJECTED');
+  const heldBack = (caseType: string) => modules.find(m => m.case_type === caseType)?.held_back_leads ?? 0;
 
   return (
     <div style={{ marginBottom: 28 }}>
@@ -112,6 +105,11 @@ export default function CaseTypePanel() {
                   </span>
                 </div>
                 <div style={{ fontSize: 14, color: 'var(--text-dim)', marginTop: 2 }}>{r.reason}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                  {heldBack(r.case_type) > 0
+                    ? `Confirming activates ${heldBack(r.case_type)} held-back lead${heldBack(r.case_type) === 1 ? '' : 's'} in the Leads tab.`
+                    : 'Nothing is held back for this type yet; confirming switches its module on for this case.'}
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn" style={{ fontSize: 14 }} disabled={actingOn === r.case_type}
@@ -132,7 +130,7 @@ export default function CaseTypePanel() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
           {rejected.map(r => (
             <span key={r.case_type} className="badge badge-low" title={r.reason || undefined} style={{ opacity: 0.7 }}>
-              ✕ {label(r.case_type)}
+              ✕ {label(r.case_type)} (module off{heldBack(r.case_type) > 0 ? `, ${heldBack(r.case_type)} lead${heldBack(r.case_type) === 1 ? '' : 's'} held back` : ''})
             </span>
           ))}
         </div>

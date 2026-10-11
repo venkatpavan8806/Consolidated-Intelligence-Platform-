@@ -79,6 +79,7 @@ export default function Dashboard() {
 
   const navItems = [
     { to: 'overview', label: 'Overview' },
+    { to: 'demo', label: 'Case Demo' },
     { to: 'graph', label: 'Graph', count: graph.nodes.length },
     { to: 'leads', label: 'Leads', count: leads.length },
     { to: 'review-queue', label: 'Review Queue', count: reviewQueue.length },
